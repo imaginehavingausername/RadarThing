@@ -3040,10 +3040,21 @@
   document.addEventListener(
     "keydown",
     (e) => {
-      if (e.target.tagName === "INPUT") e.stopPropagation();
+      if (e.target.tagName === "INPUT" || e.target.id === ACARS_DRAFT_ID)
+        e.stopPropagation();
     },
     true,
   );
+
+  ["keyup", "keypress"].forEach((type) => {
+    document.addEventListener(
+      type,
+      (e) => {
+        if (e.target.id === ACARS_DRAFT_ID) e.stopPropagation();
+      },
+      true,
+    );
+  });
 
   window.addEventListener("atc-status-update", (e) => {
     const statusEl = document.getElementById(STATUS_INDICATOR_ID);

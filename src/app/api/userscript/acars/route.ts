@@ -77,19 +77,20 @@ export async function POST(request: NextRequest) {
     const tokenHash = acarsTokenHash(
       request.headers.get("x-acars-token") ?? "",
     );
-    const status = await convex.query(api.acars.postingStatus, {
+    const status = await convex.mutation(api.acars.reservePosting, {
       googleId: payload.googleId,
       tokenHash,
+      systemSecret: process.env.CONVEX_SYSTEM_SECRET!,
     });
-    if (!status.allowed)
-      return NextResponse.json(
-        { error: status.reason },
-        { status: 403, headers: check.headers },
-      );
     if ((status.retryAfter ?? 0) > 0)
       return NextResponse.json(
         { error: "Wait 30 seconds before publishing another entry" },
         { status: 429, headers: check.headers },
+      );
+    if (!status.allowed)
+      return NextResponse.json(
+        { error: "ACARS posting is unavailable for this pilot" },
+        { status: 403, headers: check.headers },
       );
     const screening = await screenAcars(body);
     if (screening.flagged) {
@@ -119,13 +120,9 @@ export async function POST(request: NextRequest) {
       { headers: { ...check.headers, "Cache-Control": "no-store" } },
     );
   } catch (error) {
+    console.error("ACARS publish failed", error);
     return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Could not publish ACARS entry",
-      },
+      { error: "Could not publish ACARS entry" },
       { status: 503, headers: check.headers },
     );
   }
@@ -160,13 +157,9 @@ export async function DELETE(request: NextRequest) {
     });
     return NextResponse.json({ removed: true }, { headers: check.headers });
   } catch (error) {
+    console.error("ACARS removal failed", error);
     return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Could not remove ACARS entry",
-      },
+      { error: "Could not remove ACARS entry" },
       { status: 400, headers: check.headers },
     );
   }

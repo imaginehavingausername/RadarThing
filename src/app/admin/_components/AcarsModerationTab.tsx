@@ -1,14 +1,26 @@
 "use client";
 
-import { useMutation, useQuery } from "convex/react";
+import { useState } from "react";
+import { useMutation, usePaginatedQuery } from "convex/react";
 import { toast } from "sonner";
 import { api } from "../../../../convex/_generated/api";
 import { ModerationControls } from "~/components/moderation/ModerationControls";
 
 export function AcarsModerationTab() {
-  const queue = useQuery(api.acars.adminQueue, {});
+  const reports = usePaginatedQuery(
+    api.acars.adminReports,
+    {},
+    { initialNumItems: 25 },
+  );
+  const blocked = usePaginatedQuery(
+    api.acars.adminBlocked,
+    {},
+    { initialNumItems: 25 },
+  );
   const remove = useMutation(api.acars.adminRemove);
   const review = useMutation(api.acars.markReportReviewed);
+  const releaseDevice = useMutation(api.acars.adminReleaseDevice);
+  const [releaseGoogleId, setReleaseGoogleId] = useState("");
 
   return (
     <section className="space-y-8 text-white">
@@ -18,17 +30,59 @@ export function AcarsModerationTab() {
           Review viewer reports and entries rejected by automatic screening.
         </p>
       </header>
+      <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+        <label
+          htmlFor="acars-release-google-id"
+          className="text-sm font-medium"
+        >
+          Release a GeoFS device claim
+        </label>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <input
+            id="acars-release-google-id"
+            value={releaseGoogleId}
+            onChange={(event) => setReleaseGoogleId(event.target.value.trim())}
+            placeholder="GeoFS ID"
+            className="min-w-56 flex-1 rounded-lg border border-white/20 bg-black/20 px-3 py-2 text-sm"
+          />
+          <button
+            disabled={!/^\d{8,32}$/.test(releaseGoogleId)}
+            className="rounded-lg border border-amber-400/30 px-3 py-2 text-xs text-amber-200 disabled:opacity-40"
+            onClick={async () => {
+              if (
+                !window.confirm(
+                  `Release the ACARS device claim for GeoFS ID ${releaseGoogleId}?`,
+                )
+              )
+                return;
+              try {
+                const count = await releaseDevice({
+                  googleId: releaseGoogleId,
+                });
+                toast.success(
+                  count ? "Device claim released" : "No device claim found",
+                );
+                setReleaseGoogleId("");
+              } catch {
+                toast.error("Could not release device claim");
+              }
+            }}
+          >
+            Release claim
+          </button>
+        </div>
+      </div>
       <div>
         <h2 className="mb-3 font-mono text-xs font-bold tracking-widest text-cyan-300 uppercase">
           Viewer reports
         </h2>
-        {!queue ? (
+        {reports.status === "LoadingFirstPage" ? (
           <p className="text-sm text-slate-400">Loading…</p>
-        ) : queue.reports.length === 0 ? (
+        ) : reports.results.length === 0 ? (
           <p className="text-sm text-slate-400">No reports.</p>
         ) : (
           <div className="space-y-3">
-            {queue.reports.map((item) => (
+            {reports.results.map((item) => (
               <article
                 key={item._id}
                 className="rounded-xl border border-white/10 bg-white/[0.03] p-4"
@@ -101,6 +155,14 @@ export function AcarsModerationTab() {
                 )}
               </article>
             ))}
+            {reports.status === "CanLoadMore" && (
+              <button
+                className="text-sm text-cyan-300"
+                onClick={() => reports.loadMore(25)}
+              >
+                Load older reports
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -108,13 +170,13 @@ export function AcarsModerationTab() {
         <h2 className="mb-3 font-mono text-xs font-bold tracking-widest text-cyan-300 uppercase">
           Automatically blocked
         </h2>
-        {!queue ? (
+        {blocked.status === "LoadingFirstPage" ? (
           <p className="text-sm text-slate-400">Loading…</p>
-        ) : queue.blocked.length === 0 ? (
+        ) : blocked.results.length === 0 ? (
           <p className="text-sm text-slate-400">No blocked entries.</p>
         ) : (
           <div className="space-y-3">
-            {queue.blocked.map((item) => (
+            {blocked.results.map((item) => (
               <article
                 key={item._id}
                 className="rounded-xl border border-amber-400/15 bg-amber-500/[0.04] p-4"
@@ -137,6 +199,14 @@ export function AcarsModerationTab() {
                 )}
               </article>
             ))}
+            {blocked.status === "CanLoadMore" && (
+              <button
+                className="text-sm text-cyan-300"
+                onClick={() => blocked.loadMore(25)}
+              >
+                Load older blocked entries
+              </button>
+            )}
           </div>
         )}
       </div>

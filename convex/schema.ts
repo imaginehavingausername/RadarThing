@@ -272,6 +272,19 @@ export default defineSchema({
     .index("by_tokenHash", ["tokenHash"])
     .index("by_googleId", ["googleId"]),
 
+  acarsRegistrationRates: defineTable({
+    ipHash: v.string(),
+    windowStartedAt: v.number(),
+    attempts: v.number(),
+  })
+    .index("by_ipHash", ["ipHash"])
+    .index("by_windowStartedAt", ["windowStartedAt"]),
+
+  acarsPostingReservations: defineTable({
+    googleId: v.string(),
+    reservedAt: v.number(),
+  }).index("by_googleId", ["googleId"]),
+
   acarsMessages: defineTable({
     userId: v.optional(v.id("users")),
     googleId: v.string(),
@@ -304,6 +317,7 @@ export default defineSchema({
     reviewedAt: v.optional(v.number()),
   })
     .index("by_message_reporter", ["messageId", "reporterUserId"])
+    .index("by_reporter_createdAt", ["reporterUserId", "createdAt"])
     .index("by_createdAt", ["createdAt"]),
 
   waypointReminders: defineTable({

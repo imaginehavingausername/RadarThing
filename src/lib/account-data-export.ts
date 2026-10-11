@@ -1,4 +1,4 @@
-export const RADARTHING_ACCOUNT_DATA_EXPORT_VERSION = 2;
+export const RADARTHING_ACCOUNT_DATA_EXPORT_VERSION = 3;
 
 export interface RadarThingAccountDataExport {
   schema: "radarthing.account_data";
@@ -51,6 +51,13 @@ export interface RadarThingAccountDataExport {
       googleId: string;
       body: string;
       categories: string[];
+      createdAt: number;
+    }[];
+    reports: {
+      id: string;
+      googleId: string;
+      body: string;
+      reason: string;
       createdAt: number;
     }[];
   };

@@ -9,4 +9,10 @@ crons.interval(
   internal.activeTrackers.cleanupStale,
 );
 
+crons.interval(
+  "cleanup expired ACARS registration limits",
+  { minutes: 5 },
+  internal.acars.cleanupRegistrationRates,
+);
+
 export default crons;

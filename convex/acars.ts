@@ -1,5 +1,6 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { paginationOptsValidator } from "convex/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { getCurrentUser, requireAdmin, requireSystem } from "./lib/auth";
 import {
@@ -9,6 +10,8 @@ import {
 
 const MAX_MESSAGES = 20;
 const POST_COOLDOWN_MS = 30_000;
+const REGISTRATION_WINDOW_MS = 60 * 60_000;
+const REGISTRATION_LIMIT = 8;
 
 function validGoogleId(value: string) {
   return /^\d{8,32}$/.test(value);
@@ -39,8 +42,9 @@ async function postingPilot(
 async function lastPostingAttempt(
   ctx: QueryCtx | MutationCtx,
   googleId: string,
+  includeReservation = true,
 ) {
-  const [latest, blocked] = await Promise.all([
+  const [latest, blocked, reservation] = await Promise.all([
     ctx.db
       .query("acarsMessages")
       .withIndex("by_googleId_createdAt", (q) => q.eq("googleId", googleId))
@@ -51,15 +55,105 @@ async function lastPostingAttempt(
       .withIndex("by_googleId_createdAt", (q) => q.eq("googleId", googleId))
       .order("desc")
       .first(),
+    includeReservation
+      ? ctx.db
+          .query("acarsPostingReservations")
+          .withIndex("by_googleId", (q) => q.eq("googleId", googleId))
+          .first()
+      : Promise.resolve(null),
   ]);
-  return Math.max(latest?.createdAt ?? 0, blocked?.createdAt ?? 0);
+  return Math.max(
+    latest?.createdAt ?? 0,
+    blocked?.createdAt ?? 0,
+    reservation?.reservedAt ?? 0,
+  );
 }
 
 async function assertPostingCooldown(ctx: MutationCtx, googleId: string) {
-  const lastAttempt = await lastPostingAttempt(ctx, googleId);
+  const lastAttempt = await lastPostingAttempt(ctx, googleId, false);
   if (lastAttempt && Date.now() - lastAttempt < POST_COOLDOWN_MS)
     throw new Error("Wait 30 seconds before publishing another ACARS entry");
 }
+
+export const reserveRegistration = mutation({
+  args: { ipHash: v.string(), systemSecret: v.string() },
+  handler: async (ctx, args) => {
+    requireSystem(ctx, args.systemSecret);
+    if (!/^[a-f0-9]{64}$/.test(args.ipHash))
+      throw new Error("Invalid registration source");
+    const now = Date.now();
+    const current = await ctx.db
+      .query("acarsRegistrationRates")
+      .withIndex("by_ipHash", (q) => q.eq("ipHash", args.ipHash))
+      .first();
+    if (!current) {
+      await ctx.db.insert("acarsRegistrationRates", {
+        ipHash: args.ipHash,
+        windowStartedAt: now,
+        attempts: 1,
+      });
+      return { allowed: true };
+    }
+    if (now - current.windowStartedAt >= REGISTRATION_WINDOW_MS) {
+      await ctx.db.patch(current._id, { windowStartedAt: now, attempts: 1 });
+      return { allowed: true };
+    }
+    if (current.attempts >= REGISTRATION_LIMIT)
+      return {
+        allowed: false,
+        retryAfter: REGISTRATION_WINDOW_MS - (now - current.windowStartedAt),
+      };
+    await ctx.db.patch(current._id, { attempts: current.attempts + 1 });
+    return { allowed: true };
+  },
+});
+
+export const cleanupRegistrationRates = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const expired = await ctx.db
+      .query("acarsRegistrationRates")
+      .withIndex("by_windowStartedAt", (q) =>
+        q.lt("windowStartedAt", Date.now() - REGISTRATION_WINDOW_MS),
+      )
+      .take(500);
+    for (const row of expired) await ctx.db.delete(row._id);
+  },
+});
+
+export const reservePosting = mutation({
+  args: {
+    googleId: v.string(),
+    tokenHash: v.string(),
+    systemSecret: v.string(),
+  },
+  handler: async (ctx, args) => {
+    requireSystem(ctx, args.systemSecret);
+    try {
+      await postingPilot(ctx, args.tokenHash, args.googleId);
+    } catch {
+      return { allowed: false, retryAfter: 0 };
+    }
+    const now = Date.now();
+    const lastAttempt = await lastPostingAttempt(ctx, args.googleId);
+    if (lastAttempt && now - lastAttempt < POST_COOLDOWN_MS)
+      return {
+        allowed: false,
+        retryAfter: POST_COOLDOWN_MS - (now - lastAttempt),
+      };
+    const reservation = await ctx.db
+      .query("acarsPostingReservations")
+      .withIndex("by_googleId", (q) => q.eq("googleId", args.googleId))
+      .first();
+    if (reservation) await ctx.db.patch(reservation._id, { reservedAt: now });
+    else
+      await ctx.db.insert("acarsPostingReservations", {
+        googleId: args.googleId,
+        reservedAt: now,
+      });
+    return { allowed: true, retryAfter: 0 };
+  },
+});
 
 export const registerDevice = mutation({
   args: {
@@ -91,6 +185,22 @@ export const registerDevice = mutation({
       tokenHash: args.tokenHash,
       createdAt: Date.now(),
     });
+  },
+});
+
+export const isDeviceRegistered = query({
+  args: {
+    googleId: v.string(),
+    tokenHash: v.string(),
+    systemSecret: v.string(),
+  },
+  handler: async (ctx, args) => {
+    requireSystem(ctx, args.systemSecret);
+    const device = await ctx.db
+      .query("acarsDevices")
+      .withIndex("by_tokenHash", (q) => q.eq("tokenHash", args.tokenHash))
+      .first();
+    return device?.googleId === args.googleId;
   },
 });
 
@@ -248,68 +358,94 @@ export const listForDevice = query({
   },
 });
 
-export const myAccountExport = query({
-  args: {},
-  handler: async (ctx) => {
+export const exportMessages = query({
+  args: {
+    source: v.union(v.literal("user"), v.literal("google")),
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
     if (!user || user.isDeleted) throw new Error("Account not found");
-    const [messagesByUser, blockedByUser, messagesByGoogle, blockedByGoogle] =
-      await Promise.all([
-        ctx.db
-          .query("acarsMessages")
-          .withIndex("by_userId_createdAt", (q) => q.eq("userId", user._id))
-          .order("desc")
-          .take(100),
-        ctx.db
-          .query("acarsModerationEvents")
-          .withIndex("by_userId_createdAt", (q) => q.eq("userId", user._id))
-          .order("desc")
-          .take(100),
-        user.googleId
-          ? ctx.db
-              .query("acarsMessages")
-              .withIndex("by_googleId_createdAt", (q) =>
-                q.eq("googleId", user.googleId!),
-              )
-              .order("desc")
-              .take(100)
-          : Promise.resolve([]),
-        user.googleId
-          ? ctx.db
-              .query("acarsModerationEvents")
-              .withIndex("by_googleId_createdAt", (q) =>
-                q.eq("googleId", user.googleId!),
-              )
-              .order("desc")
-              .take(100)
-          : Promise.resolve([]),
-      ]);
-    const messages = [
-      ...new Map(
-        [...messagesByUser, ...messagesByGoogle].map((row) => [row._id, row]),
-      ).values(),
-    ].sort((a, b) => b.createdAt - a.createdAt);
-    const blocked = [
-      ...new Map(
-        [...blockedByUser, ...blockedByGoogle].map((row) => [row._id, row]),
-      ).values(),
-    ].sort((a, b) => b.createdAt - a.createdAt);
+    if (args.source === "google" && !user.googleId)
+      return { page: [], isDone: true, continueCursor: "" };
+    const records =
+      args.source === "user"
+        ? ctx.db
+            .query("acarsMessages")
+            .withIndex("by_userId_createdAt", (q) => q.eq("userId", user._id))
+        : ctx.db
+            .query("acarsMessages")
+            .withIndex("by_googleId_createdAt", (q) =>
+              q.eq("googleId", user.googleId!),
+            );
+    const page = await records.order("desc").paginate(args.paginationOpts);
     return {
-      messages: messages.map(({ _id, googleId, body, createdAt }) => ({
+      ...page,
+      page: page.page.map(({ _id, googleId, body, createdAt }) => ({
         id: _id,
         googleId,
         body,
         createdAt,
       })),
-      blocked: blocked.map(
-        ({ _id, googleId, body, categories, createdAt }) => ({
-          id: _id,
-          googleId,
-          body,
-          categories,
-          createdAt,
-        }),
-      ),
+    };
+  },
+});
+
+export const exportBlocked = query({
+  args: {
+    source: v.union(v.literal("user"), v.literal("google")),
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    if (!user || user.isDeleted) throw new Error("Account not found");
+    if (args.source === "google" && !user.googleId)
+      return { page: [], isDone: true, continueCursor: "" };
+    const records =
+      args.source === "user"
+        ? ctx.db
+            .query("acarsModerationEvents")
+            .withIndex("by_userId_createdAt", (q) => q.eq("userId", user._id))
+        : ctx.db
+            .query("acarsModerationEvents")
+            .withIndex("by_googleId_createdAt", (q) =>
+              q.eq("googleId", user.googleId!),
+            );
+    const page = await records.order("desc").paginate(args.paginationOpts);
+    return {
+      ...page,
+      page: page.page.map(({ _id, googleId, body, categories, createdAt }) => ({
+        id: _id,
+        googleId,
+        body,
+        categories,
+        createdAt,
+      })),
+    };
+  },
+});
+
+export const exportReports = query({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    if (!user || user.isDeleted) throw new Error("Account not found");
+    const page = await ctx.db
+      .query("acarsReports")
+      .withIndex("by_reporter_createdAt", (q) =>
+        q.eq("reporterUserId", user._id),
+      )
+      .order("desc")
+      .paginate(args.paginationOpts);
+    return {
+      ...page,
+      page: page.page.map(({ _id, googleId, body, reason, createdAt }) => ({
+        id: _id,
+        googleId,
+        body,
+        reason,
+        createdAt,
+      })),
     };
   },
 });
@@ -343,25 +479,19 @@ export const report = mutation({
   },
 });
 
-export const adminQueue = query({
-  args: {},
-  handler: async (ctx) => {
+export const adminReports = query({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
     await requireAdmin(ctx);
-    const [reports, blocked] = await Promise.all([
-      ctx.db
-        .query("acarsReports")
-        .withIndex("by_createdAt")
-        .order("desc")
-        .take(100),
-      ctx.db
-        .query("acarsModerationEvents")
-        .withIndex("by_createdAt")
-        .order("desc")
-        .take(100),
-    ]);
+    const page = await ctx.db
+      .query("acarsReports")
+      .withIndex("by_createdAt")
+      .order("desc")
+      .paginate(args.paginationOpts);
     return {
-      reports: await Promise.all(
-        reports.map(async (report) => {
+      ...page,
+      page: await Promise.all(
+        page.page.map(async (report) => {
           const message = await ctx.db.get(report.messageId);
           const pilot = report.pilotUserId
             ? await ctx.db.get(report.pilotUserId)
@@ -376,8 +506,23 @@ export const adminQueue = query({
           };
         }),
       ),
-      blocked: await Promise.all(
-        blocked.map(async (event) => {
+    };
+  },
+});
+
+export const adminBlocked = query({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const page = await ctx.db
+      .query("acarsModerationEvents")
+      .withIndex("by_createdAt")
+      .order("desc")
+      .paginate(args.paginationOpts);
+    return {
+      ...page,
+      page: await Promise.all(
+        page.page.map(async (event) => {
           const pilot = event.userId ? await ctx.db.get(event.userId) : null;
           return {
             ...event,
@@ -388,6 +533,25 @@ export const adminQueue = query({
         }),
       ),
     };
+  },
+});
+
+export const adminReleaseDevice = mutation({
+  args: { googleId: v.string() },
+  handler: async (ctx, args) => {
+    const actor = await requireAdmin(ctx);
+    if (!validGoogleId(args.googleId)) throw new Error("Invalid GeoFS ID");
+    const pilot = await ctx.db
+      .query("users")
+      .withIndex("by_googleId", (q) => q.eq("googleId", args.googleId))
+      .first();
+    if (pilot) assertModerationTarget(actor, pilot);
+    const devices = await ctx.db
+      .query("acarsDevices")
+      .withIndex("by_googleId", (q) => q.eq("googleId", args.googleId))
+      .collect();
+    for (const device of devices) await ctx.db.delete(device._id);
+    return devices.length;
   },
 });
 

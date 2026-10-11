@@ -3,16 +3,24 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   registerDevice,
+  isDeviceRegistered,
   publish,
   listPublic,
   listForDevice,
   postingStatus,
   remove,
   report,
-  adminQueue,
+  adminReports,
+  adminBlocked,
   adminRemove,
+  adminReleaseDevice,
   recordBlocked,
-  myAccountExport,
+  exportMessages,
+  exportBlocked,
+  exportReports,
+  reservePosting,
+  reserveRegistration,
+  cleanupRegistrationRates,
 } from "./acars";
 
 const googleId = "123456789012345678";
@@ -25,6 +33,8 @@ function fixture() {
     acarsDevices: any[];
     acarsMessages: any[];
     acarsModerationEvents: any[];
+    acarsReports: any[];
+    acarsRegistrationRates: any[];
   } = {
     users: [
       {
@@ -41,6 +51,8 @@ function fixture() {
     acarsMessages: [],
     acarsModerationEvents: [],
     acarsReports: [],
+    acarsRegistrationRates: [],
+    acarsPostingReservations: [],
   };
   let sequence = 0;
   let actor = "viewer";
@@ -76,6 +88,10 @@ function fixture() {
                 rows = rows.filter((row) => row[field] === value);
                 return index;
               },
+              lt: (field: string, value: number) => {
+                rows = rows.filter((row) => row[field] < value);
+                return index;
+              },
             };
             predicate?.(index);
             return q;
@@ -90,6 +106,22 @@ function fixture() {
           first: async () => rows[0] ?? null,
           take: async (count: number) => rows.slice(0, count),
           collect: async () => rows,
+          paginate: async ({
+            numItems,
+            cursor,
+          }: {
+            numItems: number;
+            cursor: string | null;
+          }) => {
+            const start = cursor ? Number(cursor) : 0;
+            const page = rows.slice(start, start + numItems);
+            const end = start + page.length;
+            return {
+              page,
+              isDone: end >= rows.length,
+              continueCursor: String(end),
+            };
+          },
         };
         return q;
       },
@@ -207,6 +239,22 @@ test("existing account ban blocks ACARS publication and hides entries", async ()
 test("one device claims a GeoFS ID and the same device can register again", async () => {
   const f = fixture();
   await call(registerDevice, f.ctx, { googleId, tokenHash, systemSecret });
+  await assert.rejects(
+    call(isDeviceRegistered, f.ctx, {
+      googleId,
+      tokenHash,
+      systemSecret: "wrong",
+    }),
+    /Unauthorized/,
+  );
+  assert.equal(
+    await call(isDeviceRegistered, f.ctx, {
+      googleId,
+      tokenHash,
+      systemSecret,
+    }),
+    true,
+  );
   await call(registerDevice, f.ctx, { googleId, tokenHash, systemSecret });
   assert.equal(f.tables.acarsDevices.length, 1);
   await assert.rejects(
@@ -252,7 +300,7 @@ test("blocked and published attempts share the mutation cooldown", async () => {
   assert.equal(f.tables.acarsMessages.length, 0);
 });
 
-test("account export includes earlier GeoFS entries without duplicates", async () => {
+test("account export pages include earlier GeoFS entries and filed reports", async () => {
   const f = fixture();
   await call(registerDevice, f.ctx, { googleId, tokenHash, systemSecret });
   await call(publish, f.ctx, {
@@ -276,16 +324,36 @@ test("account export includes earlier GeoFS entries without duplicates", async (
     createdAt: Date.now() - 60_000,
   });
   f.as("pilot");
-  const exported = await call<{
-    messages: { id: string }[];
-    blocked: { id: string }[];
-  }>(myAccountExport, f.ctx, {});
-  assert.equal(exported.messages.length, 2);
-  assert.equal(new Set(exported.messages.map((row) => row.id)).size, 2);
+  const first = await call<any>(exportMessages, f.ctx, {
+    source: "google",
+    paginationOpts: { numItems: 1, cursor: null },
+  });
+  const second = await call<any>(exportMessages, f.ctx, {
+    source: "google",
+    paginationOpts: { numItems: 1, cursor: first.continueCursor },
+  });
+  assert.equal(first.isDone, false);
   assert.deepEqual(
-    exported.blocked.map((row) => row.id),
+    [first.page[0].body, second.page[0].body],
+    ["Linked entry", "Earlier entry"],
+  );
+  const blocked = await call<any>(exportBlocked, f.ctx, {
+    source: "google",
+    paginationOpts: { numItems: 100, cursor: null },
+  });
+  assert.deepEqual(
+    blocked.page.map((row: any) => row.id),
     ["old-block"],
   );
+  f.as("viewer");
+  await call(report, f.ctx, {
+    messageId: f.tables.acarsMessages[0]._id,
+    reason: "Concern",
+  });
+  const reports = await call<any>(exportReports, f.ctx, {
+    paginationOpts: { numItems: 100, cursor: null },
+  });
+  assert.equal(reports.page[0].reason, "Concern");
 });
 
 test("reported entries and blocked attempts appear in admin review", async () => {
@@ -313,13 +381,136 @@ test("reported entries and blocked attempts appear in admin review", async () =>
     categories: ["harassment"],
     systemSecret,
   });
-  await assert.rejects(call(adminQueue, f.ctx, {}), /Unauthorized/);
+  const paginationOpts = { numItems: 25, cursor: null };
+  await assert.rejects(
+    call(adminReports, f.ctx, { paginationOpts }),
+    /Unauthorized/,
+  );
   f.as("admin");
-  const queue = await call<any>(adminQueue, f.ctx, {});
-  assert.equal(queue.reports[0].body, "Pilot update");
-  assert.equal(queue.blocked[0].categories[0], "harassment");
+  const reports = await call<any>(adminReports, f.ctx, { paginationOpts });
+  const blocked = await call<any>(adminBlocked, f.ctx, { paginationOpts });
+  assert.equal(reports.page[0].body, "Pilot update");
+  assert.equal(blocked.page[0].categories[0], "harassment");
   await call(adminRemove, f.ctx, { messageId: id });
-  const afterRemoval = await call<any>(adminQueue, f.ctx, {});
-  assert.equal(afterRemoval.reports[0].body, "Pilot update");
-  assert.equal(afterRemoval.reports[0].isMessagePresent, false);
+  const afterRemoval = await call<any>(adminReports, f.ctx, { paginationOpts });
+  assert.equal(afterRemoval.page[0].body, "Pilot update");
+  assert.equal(afterRemoval.page[0].isMessagePresent, false);
+});
+
+test("registration attempts are limited and admins can release claims", async () => {
+  const f = fixture();
+  const ipHash = "c".repeat(64);
+  for (let index = 0; index < 8; index++) {
+    assert.equal(
+      (await call<any>(reserveRegistration, f.ctx, { ipHash, systemSecret }))
+        .allowed,
+      true,
+    );
+  }
+  assert.equal(
+    (await call<any>(reserveRegistration, f.ctx, { ipHash, systemSecret }))
+      .allowed,
+    false,
+  );
+  await call(registerDevice, f.ctx, { googleId, tokenHash, systemSecret });
+  await assert.rejects(
+    call(adminReleaseDevice, f.ctx, { googleId }),
+    /Unauthorized/,
+  );
+  f.as("admin");
+  assert.equal(await call(adminReleaseDevice, f.ctx, { googleId }), 1);
+  assert.equal(f.tables.acarsDevices.length, 0);
+});
+
+test("posting reservation stops a second moderation attempt", async () => {
+  const f = fixture();
+  await call(registerDevice, f.ctx, { googleId, tokenHash, systemSecret });
+  const first = await call<any>(reservePosting, f.ctx, {
+    googleId,
+    tokenHash,
+    systemSecret,
+  });
+  const second = await call<any>(reservePosting, f.ctx, {
+    googleId,
+    tokenHash,
+    systemSecret,
+  });
+  assert.equal(first.allowed, true);
+  assert.equal(second.allowed, false);
+  assert.ok(second.retryAfter > 0);
+  await call(recordBlocked, f.ctx, {
+    googleId,
+    tokenHash,
+    body: "Flagged",
+    categories: ["harassment"],
+    systemSecret,
+  });
+  assert.equal(f.tables.acarsModerationEvents.length, 1);
+});
+
+test("older reports and previous-ID entries remain reachable after 100 rows", async () => {
+  const f = fixture();
+  for (let index = 0; index < 120; index++) {
+    f.tables.acarsMessages.push({
+      _id: `history-${index}`,
+      userId: "pilot",
+      googleId: index < 20 ? "876543210987654321" : googleId,
+      body: `Entry ${index}`,
+      createdAt: index,
+    });
+    f.tables.acarsReports.push({
+      _id: `report-${index}`,
+      messageId: `history-${index}`,
+      reporterUserId: "viewer",
+      googleId,
+      body: `Report ${index}`,
+      reason: "Concern",
+      createdAt: index,
+      reviewedAt: index === 0 ? undefined : index,
+    });
+  }
+  f.as("pilot");
+  const firstExport = await call<any>(exportMessages, f.ctx, {
+    source: "user",
+    paginationOpts: { numItems: 100, cursor: null },
+  });
+  const olderExport = await call<any>(exportMessages, f.ctx, {
+    source: "user",
+    paginationOpts: { numItems: 100, cursor: firstExport.continueCursor },
+  });
+  assert.equal(firstExport.page.length, 100);
+  assert.equal(olderExport.page.length, 20);
+  assert.equal(olderExport.page[19].googleId, "876543210987654321");
+  f.as("admin");
+  const firstReports = await call<any>(adminReports, f.ctx, {
+    paginationOpts: { numItems: 100, cursor: null },
+  });
+  const olderReports = await call<any>(adminReports, f.ctx, {
+    paginationOpts: { numItems: 100, cursor: firstReports.continueCursor },
+  });
+  assert.equal(olderReports.page.length, 20);
+  assert.equal(olderReports.page[19].reviewedAt, undefined);
+});
+
+test("expired registration rate rows are cleaned up", async () => {
+  const f = fixture();
+  f.tables.acarsRegistrationRates = [
+    {
+      _id: "expired",
+      ipHash: "a".repeat(64),
+      attempts: 8,
+      windowStartedAt: Date.now() - 3_600_001,
+    },
+    {
+      _id: "current",
+      ipHash: "b".repeat(64),
+      attempts: 1,
+      windowStartedAt: Date.now(),
+    },
+  ];
+  await call(cleanupRegistrationRates, f.ctx, {});
+  assert.deepEqual(
+    f.tables.acarsRegistrationRates.map((row) => row._id),
+    ["current"],
+  );
 });

@@ -73,7 +73,13 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("ACARS device registration failed", error);
     return NextResponse.json(
-      { error: "Could not register this ACARS device" },
+      {
+        error:
+          error instanceof Error &&
+          error.message.includes("Link a RadarThing account")
+            ? "Link a RadarThing account to your GeoFS ID before publishing ACARS"
+            : "Could not register this ACARS device",
+      },
       { status: 400, headers: cors.headers },
     );
   }

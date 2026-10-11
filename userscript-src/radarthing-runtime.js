@@ -143,7 +143,7 @@
       .then(() => {
         if (acarsSessionId === startedSessionId) acarsRetryAfter = 0;
       })
-      .catch(() => {
+      .catch((error) => {
         if (
           acarsSessionId !== startedSessionId ||
           acarsSessionGoogleId !== googleId
@@ -152,6 +152,9 @@
         acarsSessionId = "";
         acarsSessionGoogleId = "";
         acarsRetryAfter = Date.now() + 30_000;
+        if (list)
+          list.textContent =
+            error?.message || "ACARS is unavailable right now.";
         updateAcarsAvailability();
       });
   }

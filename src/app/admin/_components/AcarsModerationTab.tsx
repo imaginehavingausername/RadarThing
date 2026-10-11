@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useMutation, usePaginatedQuery } from "convex/react";
 import { toast } from "sonner";
 import { api } from "../../../../convex/_generated/api";
+import type { Id } from "../../../../convex/_generated/dataModel";
 import { ModerationControls } from "~/components/moderation/ModerationControls";
 
 export function AcarsModerationTab() {
@@ -20,7 +21,7 @@ export function AcarsModerationTab() {
   const remove = useMutation(api.acars.adminRemove);
   const review = useMutation(api.acars.markReportReviewed);
   const releaseDevice = useMutation(api.acars.adminReleaseDevice);
-  const [releaseGoogleId, setReleaseGoogleId] = useState("");
+  const [releaseRtId, setReleaseRtId] = useState("");
 
   return (
     <section className="space-y-8 text-white">
@@ -31,38 +32,35 @@ export function AcarsModerationTab() {
         </p>
       </header>
       <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-        <label
-          htmlFor="acars-release-google-id"
-          className="text-sm font-medium"
-        >
-          Release a GeoFS device claim
+        <label htmlFor="acars-release-rt-id" className="text-sm font-medium">
+          Release an ACARS device claim by RT ID
         </label>
         <div className="mt-2 flex flex-wrap gap-2">
           <input
-            id="acars-release-google-id"
-            value={releaseGoogleId}
-            onChange={(event) => setReleaseGoogleId(event.target.value.trim())}
-            placeholder="GeoFS ID"
+            id="acars-release-rt-id"
+            value={releaseRtId}
+            onChange={(event) => setReleaseRtId(event.target.value.trim())}
+            placeholder="RT ID"
             className="min-w-56 flex-1 rounded-lg border border-white/20 bg-black/20 px-3 py-2 text-sm"
           />
           <button
-            disabled={!/^\d{8,32}$/.test(releaseGoogleId)}
+            disabled={!releaseRtId}
             className="rounded-lg border border-amber-400/30 px-3 py-2 text-xs text-amber-200 disabled:opacity-40"
             onClick={async () => {
               if (
                 !window.confirm(
-                  `Release the ACARS device claim for GeoFS ID ${releaseGoogleId}?`,
+                  `Release the ACARS device claim for RT ID ${releaseRtId}?`,
                 )
               )
                 return;
               try {
                 const count = await releaseDevice({
-                  googleId: releaseGoogleId,
+                  userId: releaseRtId as Id<"users">,
                 });
                 toast.success(
                   count ? "Device claim released" : "No device claim found",
                 );
-                setReleaseGoogleId("");
+                setReleaseRtId("");
               } catch {
                 toast.error("Could not release device claim");
               }

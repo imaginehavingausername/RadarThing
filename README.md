@@ -103,7 +103,7 @@ The public install flow is:
 3. The loader reads `/userscript/latest.json`.
 4. The current runtime bundle is loaded, with a stable bundle fallback.
 
-ACARS entries can be published from the GeoFS panel after saving an active flight. They appear on RadarThing as soon as the pilot publishes or removes them. A local word filter checks text before publication; edit `src/lib/acars-moderation.ts` to update its blocked words. Viewer reports and blocked submissions are reviewed at `/admin/acars-moderation`.
+ACARS entries can be published from the GeoFS panel after saving an active flight, provided the GeoFS ID is linked to a RadarThing account. They appear on RadarThing as soon as the pilot publishes or removes them. A local word filter checks text before publication; edit `src/lib/acars-moderation.ts` to update its blocked words. Viewer reports and blocked submissions are reviewed by RT ID at `/admin/acars-moderation`.
 
 ## Attribution
 

@@ -357,6 +357,31 @@ test("one device claims a GeoFS ID and the same device can register again", asyn
   );
 });
 
+test("ACARS registration and posting require a linked RT account", async () => {
+  const f = fixture();
+  const pilot = f.tables.users?.[0];
+  assert.ok(pilot);
+  delete pilot.googleId;
+  await assert.rejects(
+    call(registerDevice, f.ctx, { googleId, tokenHash, systemSecret }),
+    /Link a RadarThing account/,
+  );
+  pilot.googleId = googleId;
+  await call(registerDevice, f.ctx, { googleId, tokenHash, systemSecret });
+  delete pilot.googleId;
+  await assert.rejects(
+    call(publish, f.ctx, {
+      googleId,
+      tokenHash,
+      sessionId,
+      body: "Unlinked entry",
+      systemSecret,
+    }),
+    /Link a RadarThing account/,
+  );
+  assert.equal(f.tables.acarsMessages.length, 0);
+});
+
 test("blocked and published attempts share the mutation cooldown", async () => {
   const f = fixture();
   await call(registerDevice, f.ctx, { googleId, tokenHash, systemSecret });
@@ -487,7 +512,11 @@ test("reported entries and blocked attempts appear in admin review", async () =>
   const reports = await call<any>(adminReports, f.ctx, { paginationOpts });
   const blocked = await call<any>(adminBlocked, f.ctx, { paginationOpts });
   assert.equal(reports.page[0].body, "Pilot update");
+  assert.equal(reports.page[0].pilotLabel, "RT ID: pilot");
+  assert.equal("googleId" in reports.page[0], false);
   assert.equal(blocked.page[0].categories[0], "harassment");
+  assert.equal(blocked.page[0].pilotLabel, "RT ID: pilot");
+  assert.equal("googleId" in blocked.page[0], false);
   await call(adminRemove, f.ctx, { messageId: id });
   const afterRemoval = await call<any>(adminReports, f.ctx, { paginationOpts });
   assert.equal(afterRemoval.page[0].body, "Pilot update");
@@ -541,12 +570,44 @@ test("registration attempts are limited and admins can release claims", async ()
   );
   await call(registerDevice, f.ctx, { googleId, tokenHash, systemSecret });
   await assert.rejects(
-    call(adminReleaseDevice, f.ctx, { googleId }),
+    call(adminReleaseDevice, f.ctx, { userId: "pilot" }),
     /Unauthorized/,
   );
   f.as("admin");
-  assert.equal(await call(adminReleaseDevice, f.ctx, { googleId }), 1);
+  await assert.rejects(
+    call(adminReleaseDevice, f.ctx, { userId: "missing" }),
+    /User not found/,
+  );
+  assert.equal(await call(adminReleaseDevice, f.ctx, { userId: "pilot" }), 1);
   assert.equal(f.tables.acarsDevices.length, 0);
+});
+
+test("legacy unlinked ACARS review does not identify pilots by GeoFS ID", async () => {
+  const f = fixture();
+  f.tables.acarsReports.push({
+    _id: "legacy-report",
+    messageId: "missing-message",
+    reporterUserId: "viewer",
+    googleId: "876543210987654321",
+    body: "Old entry",
+    reason: "Concern",
+    createdAt: Date.now(),
+  });
+  f.tables.acarsModerationEvents.push({
+    _id: "legacy-block",
+    googleId: "876543210987654321",
+    body: "Old blocked entry",
+    categories: ["harassment"],
+    createdAt: Date.now(),
+  });
+  f.as("admin");
+  const paginationOpts = { numItems: 25, cursor: null };
+  const reports = await call<any>(adminReports, f.ctx, { paginationOpts });
+  const blocked = await call<any>(adminBlocked, f.ctx, { paginationOpts });
+  assert.equal(reports.page[0].pilotLabel, "Unlinked pilot");
+  assert.equal(reports.page[0].pilotId, null);
+  assert.equal(blocked.page[0].pilotLabel, "Unlinked pilot");
+  assert.equal(blocked.page[0].userId, null);
 });
 
 test("posting reservation stops a second moderation attempt", async () => {

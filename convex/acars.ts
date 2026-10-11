@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
 import { internalMutation, mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { getCurrentUser, requireAdmin, requireSystem } from "./lib/auth";
 import { assertModerationTarget } from "./lib/moderationRules";
 
@@ -80,9 +81,24 @@ async function postingPilot(
     .query("users")
     .withIndex("by_googleId", (q) => q.eq("googleId", googleId))
     .first();
-  if (user?.isDeleted || user?.activeBanId)
+  if (!user) throw new Error("Link a RadarThing account to publish ACARS");
+  if (user.isDeleted || user.activeBanId)
     throw new Error("Account access restricted");
   return user;
+}
+
+async function moderationPilot(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users"> | undefined,
+  googleId: string,
+) {
+  return (
+    (userId ? await ctx.db.get(userId) : null) ??
+    (await ctx.db
+      .query("users")
+      .withIndex("by_googleId", (q) => q.eq("googleId", googleId))
+      .first())
+  );
 }
 
 async function lastPostingAttempt(
@@ -215,6 +231,13 @@ export const registerDevice = mutation({
     requireSystem(ctx, args.systemSecret);
     if (!validGoogleId(args.googleId) || !/^[a-f0-9]{64}$/.test(args.tokenHash))
       throw new Error("Invalid ACARS device registration");
+    const pilot = await ctx.db
+      .query("users")
+      .withIndex("by_googleId", (q) => q.eq("googleId", args.googleId))
+      .first();
+    if (!pilot) throw new Error("Link a RadarThing account to publish ACARS");
+    if (pilot.isDeleted || pilot.activeBanId)
+      throw new Error("Account access restricted");
     const existing = await ctx.db
       .query("acarsDevices")
       .withIndex("by_tokenHash", (q) => q.eq("tokenHash", args.tokenHash))
@@ -562,16 +585,21 @@ export const adminReports = query({
       page: await Promise.all(
         page.page.map(async (report) => {
           const message = await ctx.db.get(report.messageId);
-          const pilot = report.pilotUserId
-            ? await ctx.db.get(report.pilotUserId)
-            : null;
+          const pilot = await moderationPilot(
+            ctx,
+            report.pilotUserId,
+            report.googleId,
+          );
           return {
-            ...report,
+            _id: report._id,
+            messageId: report.messageId,
+            body: report.body,
+            reason: report.reason,
+            createdAt: report.createdAt,
+            reviewedAt: report.reviewedAt,
             isMessagePresent: Boolean(message),
             pilotId: pilot?._id ?? null,
-            pilotLabel:
-              pilot?.discordUsername ??
-              (pilot ? "RT ID: " + pilot._id : "GeoFS ID: " + report.googleId),
+            pilotLabel: pilot ? `RT ID: ${pilot._id}` : "Unlinked pilot",
           };
         }),
       ),
@@ -592,12 +620,18 @@ export const adminBlocked = query({
       ...page,
       page: await Promise.all(
         page.page.map(async (event) => {
-          const pilot = event.userId ? await ctx.db.get(event.userId) : null;
+          const pilot = await moderationPilot(
+            ctx,
+            event.userId,
+            event.googleId,
+          );
           return {
-            ...event,
-            pilotLabel:
-              pilot?.discordUsername ??
-              (pilot ? "RT ID: " + pilot._id : "GeoFS ID: " + event.googleId),
+            _id: event._id,
+            body: event.body,
+            categories: event.categories,
+            createdAt: event.createdAt,
+            userId: pilot?._id ?? null,
+            pilotLabel: pilot ? `RT ID: ${pilot._id}` : "Unlinked pilot",
           };
         }),
       ),
@@ -606,18 +640,17 @@ export const adminBlocked = query({
 });
 
 export const adminReleaseDevice = mutation({
-  args: { googleId: v.string() },
+  args: { userId: v.id("users") },
   handler: async (ctx, args) => {
     const actor = await requireAdmin(ctx);
-    if (!validGoogleId(args.googleId)) throw new Error("Invalid GeoFS ID");
-    const pilot = await ctx.db
-      .query("users")
-      .withIndex("by_googleId", (q) => q.eq("googleId", args.googleId))
-      .first();
-    if (pilot) assertModerationTarget(actor, pilot);
+    const pilot = await ctx.db.get(args.userId);
+    if (!pilot) throw new Error("User not found");
+    assertModerationTarget(actor, pilot);
+    if (!pilot.googleId)
+      throw new Error("This RT account has no linked GeoFS ID");
     const devices = await ctx.db
       .query("acarsDevices")
-      .withIndex("by_googleId", (q) => q.eq("googleId", args.googleId))
+      .withIndex("by_googleId", (q) => q.eq("googleId", pilot.googleId!))
       .collect();
     for (const device of devices) await ctx.db.delete(device._id);
     return devices.length;
@@ -630,7 +663,7 @@ export const adminRemove = mutation({
     const actor = await requireAdmin(ctx);
     const message = await ctx.db.get(args.messageId);
     if (!message) return;
-    const pilot = message.userId ? await ctx.db.get(message.userId) : null;
+    const pilot = await moderationPilot(ctx, message.userId, message.googleId);
     if (pilot) assertModerationTarget(actor, pilot);
     await ctx.db.delete(message._id);
   },

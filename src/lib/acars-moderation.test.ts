@@ -11,6 +11,10 @@ test("blocks whole-word profanity and slurs", () => {
     flagged: true,
     categories: ["profanity", "hate"],
   });
+  assert.deepEqual(screenAcars("f u c k and n i g g a"), {
+    flagged: true,
+    categories: ["profanity", "hate"],
+  });
 });
 
 test("catches common spelling variations", () => {

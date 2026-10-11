@@ -4,7 +4,7 @@ import { internalMutation, mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { getCurrentUser, requireAdmin, requireSystem } from "./lib/auth";
-import { assertModerationTarget } from "./lib/moderationRules";
+import { assertModerationTarget, moderationLabel } from "./lib/moderationRules";
 
 const MAX_MESSAGES = 20;
 const POST_COOLDOWN_MS = 30_000;
@@ -599,7 +599,9 @@ export const adminReports = query({
             reviewedAt: report.reviewedAt,
             isMessagePresent: Boolean(message),
             pilotId: pilot?._id ?? null,
-            pilotLabel: pilot ? `RT ID: ${pilot._id}` : "Unlinked pilot",
+            pilotLabel: pilot
+              ? moderationLabel(pilot, pilot._id)
+              : "Unlinked pilot",
           };
         }),
       ),
@@ -631,7 +633,9 @@ export const adminBlocked = query({
             categories: event.categories,
             createdAt: event.createdAt,
             userId: pilot?._id ?? null,
-            pilotLabel: pilot ? `RT ID: ${pilot._id}` : "Unlinked pilot",
+            pilotLabel: pilot
+              ? moderationLabel(pilot, pilot._id)
+              : "Unlinked pilot",
           };
         }),
       ),

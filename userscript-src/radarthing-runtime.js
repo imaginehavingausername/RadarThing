@@ -2237,14 +2237,6 @@
         <span data-tracker-count style="margin-left:auto;font-size:9px;color:#fbbf24;white-space:nowrap;"></span>
       </div>
 
-      <section id="${ACARS_PANEL_ID}" style="display:none;margin:0 0 14px;padding:10px;border:1px solid rgba(34,211,238,.22);border-radius:10px;background:rgba(8,47,73,.24)">
-        <div style="font-size:10px;font-weight:700;letter-spacing:.14em;color:#67e8f9;margin-bottom:7px">ACARS</div>
-        <textarea id="${ACARS_DRAFT_ID}" maxlength="500" rows="3" placeholder="Write a flight update for viewers…" aria-label="New ACARS entry" style="box-sizing:border-box;width:100%;resize:vertical;padding:8px;border:1px solid rgba(255,255,255,.14);border-radius:7px;background:rgba(2,6,23,.75);color:#fff;font:11px system-ui"></textarea>
-        <div style="margin-top:4px;color:#94a3b8;font-size:9px">Visible to viewers until removed.</div>
-        <button id="${ACARS_PUBLISH_ID}" type="button" style="width:100%;margin-top:7px;padding:8px;border:1px solid rgba(34,211,238,.35);border-radius:7px;background:rgba(34,211,238,.14);color:#67e8f9;font-size:10px;font-weight:700;cursor:pointer">Publish ACARS</button>
-        <div id="${ACARS_LIST_ID}" aria-live="polite" style="margin-top:8px;max-height:160px;overflow-y:auto;color:#cbd5e1;font-size:10px">No ACARS entries yet.</div>
-      </section>
-
       <div style="display:grid; gap:10px;">
         ${buildInputRow("DEP", DEP_INPUT_ID, "ICAO")}
         ${buildInputRow("ARR", ARR_INPUT_ID, "ICAO")}
@@ -2334,6 +2326,14 @@
       ">
         Flight info required
       </div>
+
+      <section id="${ACARS_PANEL_ID}" style="display:none;margin:10px 0 0;padding:10px;border:1px solid rgba(34,211,238,.22);border-radius:10px;background:rgba(8,47,73,.24)">
+        <div style="font-size:10px;font-weight:700;letter-spacing:.14em;color:#67e8f9;margin-bottom:7px">ACARS</div>
+        <textarea id="${ACARS_DRAFT_ID}" maxlength="500" rows="3" placeholder="Write a flight update for viewers…" aria-label="New ACARS entry" style="box-sizing:border-box;width:100%;resize:vertical;padding:8px;border:1px solid rgba(255,255,255,.14);border-radius:7px;background:rgba(2,6,23,.75);color:#fff;font:11px system-ui"></textarea>
+        <div style="margin-top:4px;color:#94a3b8;font-size:9px">Visible to viewers until removed.</div>
+        <button id="${ACARS_PUBLISH_ID}" type="button" style="width:100%;margin-top:7px;padding:8px;border:1px solid rgba(34,211,238,.35);border-radius:7px;background:rgba(34,211,238,.14);color:#67e8f9;font-size:10px;font-weight:700;cursor:pointer">Publish ACARS</button>
+        <div id="${ACARS_LIST_ID}" aria-live="polite" style="margin-top:8px;max-height:160px;overflow-y:auto;color:#cbd5e1;font-size:10px">No ACARS entries yet.</div>
+      </section>
 
       <p id="${SIGN_IN_NOTICE_ID}" style="
         margin:8px 0 0;

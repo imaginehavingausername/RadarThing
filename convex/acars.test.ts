@@ -33,6 +33,7 @@ const nextSessionId = "22222222-2222-4222-8222-222222222222";
 function fixture() {
   process.env.CONVEX_SYSTEM_SECRET = systemSecret;
   const tables: Record<string, any[]> & {
+    users: any[];
     acarsDevices: any[];
     acarsMessages: any[];
     acarsFlightSessions: any[];
@@ -517,6 +518,11 @@ test("reported entries and blocked attempts appear in admin review", async () =>
   assert.equal(blocked.page[0].categories[0], "harassment");
   assert.equal(blocked.page[0].pilotLabel, "RT ID: pilot");
   assert.equal("googleId" in blocked.page[0], false);
+  f.tables.users[0].discordUsername = "PilotDiscord";
+  const namedReports = await call<any>(adminReports, f.ctx, { paginationOpts });
+  const namedBlocked = await call<any>(adminBlocked, f.ctx, { paginationOpts });
+  assert.equal(namedReports.page[0].pilotLabel, "PilotDiscord");
+  assert.equal(namedBlocked.page[0].pilotLabel, "PilotDiscord");
   await call(adminRemove, f.ctx, { messageId: id });
   const afterRemoval = await call<any>(adminReports, f.ctx, { paginationOpts });
   assert.equal(afterRemoval.page[0].body, "Pilot update");

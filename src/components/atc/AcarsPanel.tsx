@@ -2,13 +2,14 @@
 
 import { useState } from "react";
 import { useUser } from "@clerk/nextjs";
-import { useMutation, useQuery } from "convex/react";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 
 export function AcarsPanel({ googleId }: { googleId?: string }) {
   const { user } = useUser();
+  const { isAuthenticated } = useConvexAuth();
   const entries = useQuery(
     api.acars.listPublic,
     googleId ? { googleId } : "skip",
@@ -18,22 +19,40 @@ export function AcarsPanel({ googleId }: { googleId?: string }) {
     null,
   );
   const [reason, setReason] = useState("");
+  const [reportError, setReportError] = useState("");
   const [busy, setBusy] = useState(false);
 
   if (!entries?.length) return null;
 
   async function submitReport(messageId: Id<"acarsMessages">) {
     if (!reason.trim()) return;
+    setReportError("");
     setBusy(true);
     try {
-      await report({ messageId, reason: reason.trim() });
-      toast.success("ACARS report sent to admins");
-      setReportingId(null);
-      setReason("");
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Could not send report",
+      const result = await report({ messageId, reason: reason.trim() });
+      if (
+        result.status === "reported" ||
+        result.status === "already_reported"
+      ) {
+        toast.success(
+          result.status === "reported"
+            ? "ACARS report sent to admins"
+            : "You already reported this ACARS entry",
+        );
+        setReportingId(null);
+        setReason("");
+        return;
+      }
+      setReportError(
+        {
+          own_entry: "You can't report your own ACARS entry.",
+          sign_in_required: "Sign in to report an ACARS entry.",
+          not_found: "This ACARS entry is no longer available.",
+          invalid_reason: "Enter a reason between 1 and 2,000 characters.",
+        }[result.status],
       );
+    } catch {
+      setReportError("Could not send the report. Please try again.");
     } finally {
       setBusy(false);
     }
@@ -63,18 +82,23 @@ export function AcarsPanel({ googleId }: { googleId?: string }) {
               >
                 {new Date(entry.createdAt).toLocaleString()}
               </time>
-              <button
-                type="button"
-                className="cursor-pointer font-mono text-[9px] text-white/35 hover:text-amber-300"
-                onClick={() => {
-                  if (!user)
-                    return toast.error("Sign in to report an ACARS entry");
-                  setReportingId(reportingId === entry._id ? null : entry._id);
-                  setReason("");
-                }}
-              >
-                Report
-              </button>
+              {(!user || (isAuthenticated && !entry.isOwnEntry)) && (
+                <button
+                  type="button"
+                  className="cursor-pointer font-mono text-[9px] text-white/35 hover:text-amber-300"
+                  onClick={() => {
+                    if (!user)
+                      return toast.error("Sign in to report an ACARS entry");
+                    setReportingId(
+                      reportingId === entry._id ? null : entry._id,
+                    );
+                    setReason("");
+                    setReportError("");
+                  }}
+                >
+                  Report
+                </button>
+              )}
             </div>
             <p className="font-mono text-[11px] leading-relaxed break-words whitespace-pre-wrap text-white/85">
               {entry.body}
@@ -108,6 +132,11 @@ export function AcarsPanel({ googleId }: { googleId?: string }) {
                 >
                   Send report
                 </button>
+                {reportError && (
+                  <p role="alert" className="text-xs text-red-300">
+                    {reportError}
+                  </p>
+                )}
               </form>
             )}
           </article>

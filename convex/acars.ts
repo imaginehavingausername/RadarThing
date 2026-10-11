@@ -3,10 +3,7 @@ import { paginationOptsValidator } from "convex/server";
 import { internalMutation, mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { getCurrentUser, requireAdmin, requireSystem } from "./lib/auth";
-import {
-  assertModerationTarget,
-  moderationReason,
-} from "./lib/moderationRules";
+import { assertModerationTarget } from "./lib/moderationRules";
 
 const MAX_MESSAGES = 20;
 const POST_COOLDOWN_MS = 30_000;
@@ -318,6 +315,7 @@ export const listPublic = query({
   args: { googleId: v.string() },
   handler: async (ctx, args) => {
     if (!validGoogleId(args.googleId)) return [];
+    const viewer = await getCurrentUser(ctx);
     const user = await ctx.db
       .query("users")
       .withIndex("by_googleId", (q) => q.eq("googleId", args.googleId))
@@ -330,10 +328,11 @@ export const listPublic = query({
       )
       .order("desc")
       .take(MAX_MESSAGES);
-    return messages.map(({ _id, body, createdAt }) => ({
+    return messages.map(({ _id, body, createdAt, userId }) => ({
       _id,
       body,
       createdAt,
+      isOwnEntry: !!viewer && userId === viewer._id,
     }));
   },
 });
@@ -455,27 +454,31 @@ export const report = mutation({
   handler: async (ctx, args) => {
     const reporter = await getCurrentUser(ctx);
     if (!reporter || reporter.isDeleted || reporter.activeBanId)
-      throw new Error("Sign in to report an ACARS entry");
+      return { status: "sign_in_required" as const };
     const message = await ctx.db.get(args.messageId);
-    if (!message) throw new Error("ACARS entry not found");
+    if (!message) return { status: "not_found" as const };
     if (message.userId === reporter._id)
-      throw new Error("You cannot report your own entry");
+      return { status: "own_entry" as const };
+    const reason = args.reason.trim();
+    if (!reason || reason.length > 2000)
+      return { status: "invalid_reason" as const };
     const previous = await ctx.db
       .query("acarsReports")
       .withIndex("by_message_reporter", (q) =>
         q.eq("messageId", args.messageId).eq("reporterUserId", reporter._id),
       )
       .first();
-    if (previous) return previous._id;
-    return await ctx.db.insert("acarsReports", {
+    if (previous) return { status: "already_reported" as const };
+    await ctx.db.insert("acarsReports", {
       messageId: args.messageId,
       reporterUserId: reporter._id,
       pilotUserId: message.userId,
       googleId: message.googleId,
       body: message.body,
-      reason: moderationReason(args.reason),
+      reason,
       createdAt: Date.now(),
     });
+    return { status: "reported" as const };
   },
 });
 

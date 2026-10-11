@@ -365,14 +365,15 @@ test("reported entries and blocked attempts appear in admin review", async () =>
     body: "Pilot update",
     systemSecret,
   });
-  const reportId = await call<string>(report, f.ctx, {
-    messageId: id,
-    reason: "Misleading",
-  });
-  assert.equal(
-    await call(report, f.ctx, { messageId: id, reason: "Duplicate" }),
-    reportId,
+  assert.deepEqual(
+    await call(report, f.ctx, { messageId: id, reason: "Misleading" }),
+    { status: "reported" },
   );
+  assert.deepEqual(
+    await call(report, f.ctx, { messageId: id, reason: "Duplicate" }),
+    { status: "already_reported" },
+  );
+  assert.equal(f.tables.acarsReports.length, 1);
   f.tables.acarsMessages[0].createdAt -= 60_000;
   await call(recordBlocked, f.ctx, {
     googleId,
@@ -395,6 +396,35 @@ test("reported entries and blocked attempts appear in admin review", async () =>
   const afterRemoval = await call<any>(adminReports, f.ctx, { paginationOpts });
   assert.equal(afterRemoval.page[0].body, "Pilot update");
   assert.equal(afterRemoval.page[0].isMessagePresent, false);
+});
+
+test("own ACARS reports return a user-facing status without creating a report", async () => {
+  const f = fixture();
+  await call(registerDevice, f.ctx, { googleId, tokenHash, systemSecret });
+  const id = await call<string>(publish, f.ctx, {
+    googleId,
+    tokenHash,
+    body: "Pilot update",
+    systemSecret,
+  });
+  f.as("pilot");
+  assert.equal(
+    (await call<any[]>(listPublic, f.ctx, { googleId }))[0].isOwnEntry,
+    true,
+  );
+  assert.deepEqual(
+    await call(report, f.ctx, { messageId: id, reason: "Own report" }),
+    { status: "own_entry" },
+  );
+  assert.equal(f.tables.acarsReports.length, 0);
+  f.as("viewer");
+  assert.equal(
+    (await call<any[]>(listPublic, f.ctx, { googleId }))[0].isOwnEntry,
+    false,
+  );
+  assert.deepEqual(await call(report, f.ctx, { messageId: id, reason: " " }), {
+    status: "invalid_reason",
+  });
 });
 
 test("registration attempts are limited and admins can release claims", async () => {

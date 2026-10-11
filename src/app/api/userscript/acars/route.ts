@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { convex, api } from "~/server/convex";
-import { acarsCors, acarsTokenHash, screenAcars } from "~/server/acars";
+import { acarsCors, acarsTokenHash } from "~/server/acars";
+import { screenAcars } from "~/lib/acars-moderation";
 import type { Id } from "../../../../../convex/_generated/dataModel";
 
 function guard(request: NextRequest) {
@@ -92,7 +93,7 @@ export async function POST(request: NextRequest) {
         { error: "ACARS posting is unavailable for this pilot" },
         { status: 403, headers: check.headers },
       );
-    const screening = await screenAcars(body);
+    const screening = screenAcars(body);
     if (screening.flagged) {
       await convex.mutation(api.acars.recordBlocked, {
         googleId: payload.googleId,

@@ -94,7 +94,7 @@ Generated userscript files are built into `public/userscript/` and `radarthing.u
 pnpm run build:userscript
 ```
 
-To test unpublished userscript changes in GeoFS, run `pnpm run build:userscript:dev` and install the generated `radarthing.dev.user.js` in Tampermonkey. This standalone build uses the current branch code and sends ACARS requests to `http://localhost:3000`; run `pnpm dev` for the local website and API. Disable the regular RadarThing userscript while testing to avoid loading both copies. The local app needs its Convex functions and `OPENAI_API_KEY` configured for ACARS publishing.
+To test unpublished userscript changes in GeoFS, run `pnpm run build:userscript:dev` and install the generated `radarthing.dev.user.js` in Tampermonkey. This standalone build uses the current branch code and sends ACARS requests to `http://localhost:3000`; run `pnpm dev` for the local website and API. Disable the regular RadarThing userscript while testing to avoid loading both copies. The local app needs its Convex functions configured for ACARS publishing.
 
 The public install flow is:
 
@@ -103,7 +103,7 @@ The public install flow is:
 3. The loader reads `/userscript/latest.json`.
 4. The current runtime bundle is loaded, with a stable bundle fallback.
 
-ACARS entries can be published from the GeoFS panel after saving an active flight. They appear on RadarThing as soon as the pilot publishes or removes them. Set the server-only `OPENAI_API_KEY` in the Next.js deployment to screen text before publication; publishing fails closed while screening is unavailable. Viewer reports and blocked submissions are reviewed at `/admin/acars-moderation`.
+ACARS entries can be published from the GeoFS panel after saving an active flight. They appear on RadarThing as soon as the pilot publishes or removes them. A local word filter checks text before publication; edit `src/lib/acars-moderation.ts` to update its blocked words. Viewer reports and blocked submissions are reviewed at `/admin/acars-moderation`.
 
 ## Attribution
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
+import { useMutation, usePaginatedQuery } from "convex/react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { api } from "../../../../convex/_generated/api";
@@ -24,11 +24,6 @@ export function AcarsModerationTab() {
   const review = useMutation(api.acars.markReportReviewed);
   const releaseDevice = useMutation(api.acars.adminReleaseDevice);
   const [releaseRtId, setReleaseRtId] = useState("");
-  const [pilotSearch, setPilotSearch] = useState("");
-  const matchingPilots = useQuery(
-    api.moderation.searchTargets,
-    pilotSearch.trim() ? { search: pilotSearch } : "skip",
-  );
 
   return (
     <section className="space-y-8 text-white">
@@ -38,47 +33,6 @@ export function AcarsModerationTab() {
           Review viewer reports and entries rejected by automatic screening.
         </p>
       </header>
-      <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-        <label htmlFor="acars-pilot-search" className="text-sm font-medium">
-          Find an RT account
-        </label>
-        <input
-          id="acars-pilot-search"
-          value={pilotSearch}
-          onChange={(event) => setPilotSearch(event.target.value)}
-          placeholder="Search Discord username or RT ID"
-          className="mt-2 w-full rounded-lg border border-white/20 bg-black/20 px-3 py-2 text-sm outline-none focus:border-cyan-400"
-        />
-        {matchingPilots?.map((pilot) => (
-          <div
-            key={pilot._id}
-            className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 py-3 last:border-0"
-          >
-            <Link
-              href={`/pilot/${pilot._id}`}
-              className="group block min-w-0 hover:underline"
-              aria-label={`Open ${pilot.label}'s profile`}
-            >
-              <span className="block text-sm font-semibold break-all text-cyan-300">
-                {pilot.label}
-              </span>
-              <span className="block text-xs break-all text-slate-400">
-                RT ID: {pilot._id}
-              </span>
-            </Link>
-            <button
-              type="button"
-              onClick={() => setReleaseRtId(pilot._id)}
-              className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-slate-200 hover:bg-white/10"
-            >
-              Select for device release
-            </button>
-          </div>
-        ))}
-        {pilotSearch.trim() && matchingPilots?.length === 0 && (
-          <p className="mt-3 text-sm text-slate-400">No matching accounts.</p>
-        )}
-      </div>
       <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
         <label htmlFor="acars-release-rt-id" className="text-sm font-medium">
           Release an ACARS device claim by RT ID

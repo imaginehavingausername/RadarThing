@@ -61,8 +61,10 @@ export async function POST(request: NextRequest) {
       !payload ||
       typeof payload !== "object" ||
       !("googleId" in payload) ||
+      !("sessionId" in payload) ||
       !("body" in payload) ||
       typeof payload.googleId !== "string" ||
+      typeof payload.sessionId !== "string" ||
       typeof payload.body !== "string"
     )
       return NextResponse.json(
@@ -80,6 +82,7 @@ export async function POST(request: NextRequest) {
     );
     const status = await convex.mutation(api.acars.reservePosting, {
       googleId: payload.googleId,
+      sessionId: payload.sessionId,
       tokenHash,
       systemSecret: process.env.CONVEX_SYSTEM_SECRET!,
     });
@@ -97,6 +100,7 @@ export async function POST(request: NextRequest) {
     if (screening.flagged) {
       await convex.mutation(api.acars.recordBlocked, {
         googleId: payload.googleId,
+        sessionId: payload.sessionId,
         tokenHash,
         body,
         categories: screening.categories,
@@ -112,6 +116,7 @@ export async function POST(request: NextRequest) {
     }
     const id = await convex.mutation(api.acars.publish, {
       googleId: payload.googleId,
+      sessionId: payload.sessionId,
       tokenHash,
       body,
       systemSecret: process.env.CONVEX_SYSTEM_SECRET!,

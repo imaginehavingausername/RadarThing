@@ -14,6 +14,55 @@ function validGoogleId(value: string) {
   return /^\d{8,32}$/.test(value);
 }
 
+function validSessionId(value: string) {
+  return /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(value);
+}
+
+async function currentFlight(ctx: QueryCtx | MutationCtx, googleId: string) {
+  return await ctx.db
+    .query("acarsFlightSessions")
+    .withIndex("by_googleId", (q) => q.eq("googleId", googleId))
+    .first();
+}
+
+export const setFlightSession = mutation({
+  args: {
+    googleId: v.string(),
+    tokenHash: v.string(),
+    sessionId: v.string(),
+    active: v.boolean(),
+    systemSecret: v.string(),
+  },
+  handler: async (ctx, args) => {
+    requireSystem(ctx, args.systemSecret);
+    await postingPilot(ctx, args.tokenHash, args.googleId);
+    if (!validSessionId(args.sessionId))
+      throw new Error("Invalid ACARS flight session");
+    const current = await currentFlight(ctx, args.googleId);
+    if (!args.active) {
+      if (current?.sessionId === args.sessionId)
+        await ctx.db.patch(current._id, {
+          active: false,
+          updatedAt: Date.now(),
+        });
+      return;
+    }
+    if (current)
+      await ctx.db.patch(current._id, {
+        sessionId: args.sessionId,
+        active: true,
+        updatedAt: Date.now(),
+      });
+    else
+      await ctx.db.insert("acarsFlightSessions", {
+        googleId: args.googleId,
+        sessionId: args.sessionId,
+        active: true,
+        updatedAt: Date.now(),
+      });
+  },
+});
+
 async function postingPilot(
   ctx: QueryCtx | MutationCtx,
   tokenHash: string,
@@ -122,6 +171,7 @@ export const reservePosting = mutation({
   args: {
     googleId: v.string(),
     tokenHash: v.string(),
+    sessionId: v.string(),
     systemSecret: v.string(),
   },
   handler: async (ctx, args) => {
@@ -131,6 +181,9 @@ export const reservePosting = mutation({
     } catch {
       return { allowed: false, retryAfter: 0 };
     }
+    const flight = await currentFlight(ctx, args.googleId);
+    if (!flight?.active || flight.sessionId !== args.sessionId)
+      return { allowed: false, retryAfter: 0 };
     const now = Date.now();
     const lastAttempt = await lastPostingAttempt(ctx, args.googleId);
     if (lastAttempt && now - lastAttempt < POST_COOLDOWN_MS)
@@ -226,12 +279,16 @@ export const publish = mutation({
   args: {
     googleId: v.string(),
     tokenHash: v.string(),
+    sessionId: v.string(),
     body: v.string(),
     systemSecret: v.string(),
   },
   handler: async (ctx, args) => {
     requireSystem(ctx, args.systemSecret);
     const user = await postingPilot(ctx, args.tokenHash, args.googleId);
+    const flight = await currentFlight(ctx, args.googleId);
+    if (!flight?.active || flight.sessionId !== args.sessionId)
+      throw new Error("ACARS flight session is no longer active");
     const body = args.body.trim();
     if (!body || body.length > 500)
       throw new Error("ACARS text must be 1–500 characters");
@@ -250,6 +307,7 @@ export const publish = mutation({
       userId: user?._id,
       googleId: args.googleId,
       deviceHash: args.tokenHash,
+      sessionId: args.sessionId,
       body,
       createdAt: Date.now(),
     });
@@ -260,6 +318,7 @@ export const recordBlocked = mutation({
   args: {
     googleId: v.string(),
     tokenHash: v.string(),
+    sessionId: v.string(),
     body: v.string(),
     categories: v.array(v.string()),
     systemSecret: v.string(),
@@ -267,6 +326,9 @@ export const recordBlocked = mutation({
   handler: async (ctx, args) => {
     requireSystem(ctx, args.systemSecret);
     const user = await postingPilot(ctx, args.tokenHash, args.googleId);
+    const flight = await currentFlight(ctx, args.googleId);
+    if (!flight?.active || flight.sessionId !== args.sessionId)
+      throw new Error("ACARS flight session is no longer active");
     if (!args.body.trim() || args.body.length > 500)
       throw new Error("Invalid ACARS text");
     await assertPostingCooldown(ctx, args.googleId);
@@ -321,10 +383,12 @@ export const listPublic = query({
       .withIndex("by_googleId", (q) => q.eq("googleId", args.googleId))
       .first();
     if (user?.isDeleted || user?.activeBanId) return [];
+    const flight = await currentFlight(ctx, args.googleId);
+    if (!flight?.active) return [];
     const messages = await ctx.db
       .query("acarsMessages")
-      .withIndex("by_googleId_createdAt", (q) =>
-        q.eq("googleId", args.googleId),
+      .withIndex("by_googleId_sessionId_createdAt", (q) =>
+        q.eq("googleId", args.googleId).eq("sessionId", flight.sessionId),
       )
       .order("desc")
       .take(MAX_MESSAGES);
@@ -341,10 +405,12 @@ export const listForDevice = query({
   args: { googleId: v.string(), tokenHash: v.string() },
   handler: async (ctx, args) => {
     await postingPilot(ctx, args.tokenHash, args.googleId);
+    const flight = await currentFlight(ctx, args.googleId);
+    if (!flight?.active) return [];
     const messages = await ctx.db
       .query("acarsMessages")
-      .withIndex("by_googleId_createdAt", (q) =>
-        q.eq("googleId", args.googleId),
+      .withIndex("by_googleId_sessionId_createdAt", (q) =>
+        q.eq("googleId", args.googleId).eq("sessionId", flight.sessionId),
       )
       .order("desc")
       .take(MAX_MESSAGES);

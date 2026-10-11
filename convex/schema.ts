@@ -285,14 +285,27 @@ export default defineSchema({
     reservedAt: v.number(),
   }).index("by_googleId", ["googleId"]),
 
+  acarsFlightSessions: defineTable({
+    googleId: v.string(),
+    sessionId: v.string(),
+    active: v.boolean(),
+    updatedAt: v.number(),
+  }).index("by_googleId", ["googleId"]),
+
   acarsMessages: defineTable({
     userId: v.optional(v.id("users")),
     googleId: v.string(),
     deviceHash: v.string(),
+    sessionId: v.optional(v.string()),
     body: v.string(),
     createdAt: v.number(),
   })
     .index("by_googleId_createdAt", ["googleId", "createdAt"])
+    .index("by_googleId_sessionId_createdAt", [
+      "googleId",
+      "sessionId",
+      "createdAt",
+    ])
     .index("by_userId_createdAt", ["userId", "createdAt"]),
 
   acarsModerationEvents: defineTable({

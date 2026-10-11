@@ -44,6 +44,7 @@
   const TRACKING_STATUS_POLL_INTERVAL_MS = 15000;
   const ACARS_API = "https://radarthing.com/api/userscript/acars";
   const ACARS_DEVICE_API = `${ACARS_API}/device`;
+  const ACARS_FLIGHT_API = `${ACARS_API}/flight`;
   const ACARS_PANEL_ID = "radarthing-acars-panel";
   const ACARS_DRAFT_ID = "radarthing-acars-draft";
   const ACARS_PUBLISH_ID = "radarthing-acars-publish";
@@ -63,6 +64,11 @@
   let trackingStatusRequestId = 0;
   let acarsBusy = false;
   let acarsRequestId = 0;
+  let acarsSessionId = "";
+  let acarsSessionGoogleId = "";
+  let acarsFlightSignature = "";
+  let acarsFlightQueue = Promise.resolve();
+  let acarsRetryAfter = 0;
 
   function acarsPilotId() {
     const id = String(window.geofs?.userRecord?.googleid || "");
@@ -75,9 +81,79 @@
     if (token && /^[a-f0-9]{64}$/.test(token)) return token;
     const bytes = new Uint8Array(32);
     crypto.getRandomValues(bytes);
-    token = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+    token = Array.from(bytes, (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join("");
     localStorage.setItem(key, token);
     return token;
+  }
+
+  function acarsSessionKey(googleId) {
+    return `radarthing-acars-flight-${googleId}`;
+  }
+
+  async function ensureAcarsDevice(googleId, token) {
+    const response = await fetch(ACARS_DEVICE_API, {
+      method: "POST",
+      headers: acarsHeaders(token),
+      body: JSON.stringify({ googleId }),
+    });
+    const result = await response.json();
+    if (!response.ok)
+      throw new Error(result.error || "ACARS registration failed");
+  }
+
+  function queueAcarsFlight(googleId, sessionId, active) {
+    acarsFlightQueue = acarsFlightQueue
+      .catch(() => {})
+      .then(async () => {
+        const token = active
+          ? acarsDeviceToken(googleId)
+          : localStorage.getItem(`radarthing-acars-device-${googleId}`);
+        if (!token) return;
+        if (active) await ensureAcarsDevice(googleId, token);
+        const response = await fetch(ACARS_FLIGHT_API, {
+          method: "POST",
+          headers: acarsHeaders(token),
+          body: JSON.stringify({ googleId, sessionId, active }),
+        });
+        if (!response.ok)
+          throw new Error("Could not update ACARS flight session");
+      });
+    return acarsFlightQueue;
+  }
+
+  function startAcarsFlight(googleId, resumed = false) {
+    if (
+      acarsSessionGoogleId &&
+      acarsSessionGoogleId !== googleId &&
+      acarsSessionId
+    )
+      void queueAcarsFlight(acarsSessionGoogleId, acarsSessionId, false).catch(
+        () => {},
+      );
+    const list = document.getElementById(ACARS_LIST_ID);
+    if (list) list.replaceChildren();
+    const saved = resumed && localStorage.getItem(acarsSessionKey(googleId));
+    acarsSessionId = saved || crypto.randomUUID();
+    acarsSessionGoogleId = googleId;
+    localStorage.setItem(acarsSessionKey(googleId), acarsSessionId);
+    const startedSessionId = acarsSessionId;
+    void queueAcarsFlight(googleId, startedSessionId, true)
+      .then(() => {
+        if (acarsSessionId === startedSessionId) acarsRetryAfter = 0;
+      })
+      .catch(() => {
+        if (
+          acarsSessionId !== startedSessionId ||
+          acarsSessionGoogleId !== googleId
+        )
+          return;
+        acarsSessionId = "";
+        acarsSessionGoogleId = "";
+        acarsRetryAfter = Date.now() + 30_000;
+        updateAcarsAvailability();
+      });
   }
 
   function acarsHeaders(token) {
@@ -92,7 +168,8 @@
     const panel = document.getElementById(ACARS_PANEL_ID);
     const button = document.getElementById(ACARS_PUBLISH_ID);
     const draft = document.getElementById(ACARS_DRAFT_ID);
-    const active = flightActiveForTrackingBadge && Boolean(acarsPilotId());
+    const active =
+      flightActiveForTrackingBadge && Boolean(acarsPilotId() && acarsSessionId);
     if (panel) panel.style.display = active ? "block" : "none";
     if (button) button.disabled = !active || acarsBusy;
     if (draft) draft.disabled = !active || acarsBusy;
@@ -102,19 +179,33 @@
     const list = document.getElementById(ACARS_LIST_ID);
     const googleId = acarsPilotId();
     const requestId = ++acarsRequestId;
-    if (!list || !flightActiveForTrackingBadge || !googleId) return;
+    const sessionId = acarsSessionId;
+    if (!list || !flightActiveForTrackingBadge || !googleId || !sessionId)
+      return;
     try {
+      await acarsFlightQueue;
+      if (requestId !== acarsRequestId || acarsSessionId !== sessionId) return;
       const token = localStorage.getItem(`radarthing-acars-device-${googleId}`);
-      const response = await fetch(`${ACARS_API}?googleId=${encodeURIComponent(googleId)}`, {
-        cache: "no-store", headers: acarsHeaders(token),
-      });
+      const response = await fetch(
+        `${ACARS_API}?googleId=${encodeURIComponent(googleId)}`,
+        {
+          cache: "no-store",
+          headers: acarsHeaders(token),
+        },
+      );
       if (!response.ok) throw new Error("Could not load ACARS entries");
       const data = await response.json();
-      if (requestId !== acarsRequestId || acarsPilotId() !== googleId) return;
+      if (
+        requestId !== acarsRequestId ||
+        acarsPilotId() !== googleId ||
+        acarsSessionId !== sessionId
+      )
+        return;
       list.replaceChildren();
       for (const message of data.messages || []) {
         const row = document.createElement("div");
-        row.style.cssText = "border-top:1px solid rgba(255,255,255,.08);padding:8px 0;font-size:11px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere";
+        row.style.cssText =
+          "border-top:1px solid rgba(255,255,255,.08);padding:8px 0;font-size:11px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere";
         const time = document.createElement("div");
         time.style.cssText = "font-size:9px;color:#67e8f9;margin-bottom:3px";
         time.textContent = new Date(message.createdAt).toLocaleString();
@@ -125,7 +216,8 @@
           const remove = document.createElement("button");
           remove.type = "button";
           remove.textContent = "Remove";
-          remove.style.cssText = "margin-top:4px;padding:0;border:0;background:none;color:#fca5a5;font-size:9px;cursor:pointer";
+          remove.style.cssText =
+            "margin-top:4px;padding:0;border:0;background:none;color:#fca5a5;font-size:9px;cursor:pointer";
           remove.addEventListener("click", () => void removeAcars(message._id));
           row.appendChild(remove);
         }
@@ -133,21 +225,25 @@
       }
       if (!data.messages?.length) list.textContent = "No ACARS entries yet.";
     } catch (_) {
-      if (requestId === acarsRequestId) list.textContent = "Could not load ACARS entries.";
+      if (requestId === acarsRequestId)
+        list.textContent = "Could not load ACARS entries.";
     }
   }
 
   async function removeAcars(messageId) {
     const googleId = acarsPilotId();
-    const token = googleId && localStorage.getItem(`radarthing-acars-device-${googleId}`);
+    const token =
+      googleId && localStorage.getItem(`radarthing-acars-device-${googleId}`);
     if (!googleId || !token || !flightActiveForTrackingBadge) return;
     try {
       const response = await fetch(ACARS_API, {
-        method: "DELETE", headers: acarsHeaders(token),
+        method: "DELETE",
+        headers: acarsHeaders(token),
         body: JSON.stringify({ googleId, messageId }),
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Could not remove ACARS entry");
+      if (!response.ok)
+        throw new Error(result.error || "Could not remove ACARS entry");
       showToast("ACARS entry removed");
       await refreshAcars();
     } catch (error) {
@@ -159,22 +255,24 @@
     const draft = document.getElementById(ACARS_DRAFT_ID);
     const googleId = acarsPilotId();
     const body = draft?.value.trim() || "";
-    if (!flightActiveForTrackingBadge || !googleId) return showToast("Save an active flight while signed in to GeoFS", true);
-    if (!body || body.length > 500) return showToast("Enter 1–500 ACARS characters", true);
+    const sessionId = acarsSessionId;
+    if (!flightActiveForTrackingBadge || !googleId || !sessionId)
+      return showToast("Save an active flight while signed in to GeoFS", true);
+    if (!body || body.length > 500)
+      return showToast("Enter 1–500 ACARS characters", true);
     if (acarsBusy) return;
     acarsBusy = true;
     updateAcarsAvailability();
     try {
+      await acarsFlightQueue;
+      if (!flightActiveForTrackingBadge || acarsSessionId !== sessionId)
+        throw new Error("This flight has ended");
       const token = acarsDeviceToken(googleId);
-      const registration = await fetch(ACARS_DEVICE_API, {
-        method: "POST", headers: acarsHeaders(token),
-        body: JSON.stringify({ googleId }),
-      });
-      const registered = await registration.json();
-      if (!registration.ok) throw new Error(registered.error || "ACARS registration failed");
+      await ensureAcarsDevice(googleId, token);
       const response = await fetch(ACARS_API, {
-        method: "POST", headers: acarsHeaders(token),
-        body: JSON.stringify({ googleId, body }),
+        method: "POST",
+        headers: acarsHeaders(token),
+        body: JSON.stringify({ googleId, sessionId, body }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "ACARS publish failed");
@@ -1048,6 +1146,7 @@
             sqk: resumedSession.squawk || "",
             af: resumedSession.af || "",
             takeoffTime: resumedSession.takeoffTime || "",
+            resumed: true,
             active: true,
           },
         }),
@@ -2311,7 +2410,9 @@
     makeFlightUiMovable();
     updateSignInNotice();
     updateAcarsAvailability();
-    document.getElementById(ACARS_PUBLISH_ID).addEventListener("click", () => void publishAcars());
+    document
+      .getElementById(ACARS_PUBLISH_ID)
+      .addEventListener("click", () => void publishAcars());
 
     if (isMobile) {
       mobileFlightUIOpenButton = document.createElement("button");
@@ -3074,15 +3175,42 @@
   window.addEventListener("atc-data-sync", (e) => {
     const detail = e.detail || {};
     if (detail.active === false) {
+      const googleId = acarsSessionGoogleId;
+      const endedSessionId = acarsSessionId;
       flightActiveForTrackingBadge = false;
+      acarsSessionId = "";
+      acarsSessionGoogleId = "";
+      acarsFlightSignature = "";
+      acarsRetryAfter = 0;
+      if (googleId) localStorage.removeItem(acarsSessionKey(googleId));
+      if (googleId && endedSessionId)
+        void queueAcarsFlight(googleId, endedSessionId, false).catch(() => {});
       trackingStatusRequestId += 1;
       hideMostTrackedBadge();
       acarsRequestId += 1;
+      const list = document.getElementById(ACARS_LIST_ID);
+      if (list) list.replaceChildren();
       updateAcarsAvailability();
       return;
     }
     fillFlightForm(detail);
     if (detail.active === true) {
+      const signature = `${String(detail.dep || detail.departure || "")
+        .trim()
+        .toUpperCase()}|${String(detail.flt || detail.flightNo || "")
+        .trim()
+        .toUpperCase()}`;
+      if (
+        Date.now() >= acarsRetryAfter &&
+        (!flightActiveForTrackingBadge ||
+          !acarsSessionId ||
+          acarsSessionGoogleId !== acarsPilotId() ||
+          (acarsFlightSignature && signature !== acarsFlightSignature))
+      ) {
+        const googleId = acarsPilotId();
+        if (googleId) startAcarsFlight(googleId, detail.resumed);
+      }
+      acarsFlightSignature = signature;
       flightActiveForTrackingBadge = true;
       void refreshMostTrackedBadge();
       updateAcarsAvailability();
@@ -3122,5 +3250,18 @@
   startResumePromptPolling();
   setInterval(syncFlightPlan, 3000);
   setInterval(updateIdentUI, 1000);
-  setInterval(updateSignInNotice, 1000);
+  setInterval(() => {
+    updateSignInNotice();
+    const googleId = acarsPilotId();
+    if (
+      flightActiveForTrackingBadge &&
+      Date.now() >= acarsRetryAfter &&
+      googleId &&
+      acarsSessionGoogleId !== googleId
+    ) {
+      startAcarsFlight(googleId);
+      updateAcarsAvailability();
+      void refreshAcars();
+    }
+  }, 1000);
 })();

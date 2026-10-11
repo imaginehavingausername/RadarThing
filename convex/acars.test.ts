@@ -21,17 +21,21 @@ import {
   reservePosting,
   reserveRegistration,
   cleanupRegistrationRates,
+  setFlightSession,
 } from "./acars";
 
 const googleId = "123456789012345678";
 const tokenHash = "a".repeat(64);
 const systemSecret = "test-acars-secret";
+const sessionId = "11111111-1111-4111-8111-111111111111";
+const nextSessionId = "22222222-2222-4222-8222-222222222222";
 
 function fixture() {
   process.env.CONVEX_SYSTEM_SECRET = systemSecret;
   const tables: Record<string, any[]> & {
     acarsDevices: any[];
     acarsMessages: any[];
+    acarsFlightSessions: any[];
     acarsModerationEvents: any[];
     acarsReports: any[];
     acarsRegistrationRates: any[];
@@ -49,6 +53,9 @@ function fixture() {
     ],
     acarsDevices: [],
     acarsMessages: [],
+    acarsFlightSessions: [
+      { _id: "flight-session", googleId, sessionId, active: true },
+    ],
     acarsModerationEvents: [],
     acarsReports: [],
     acarsRegistrationRates: [],
@@ -148,6 +155,7 @@ test("pilot entries require a registered device and trusted server mutation", as
     call(publish, f.ctx, {
       googleId,
       tokenHash,
+      sessionId,
       body: "Route update",
       systemSecret,
     }),
@@ -162,6 +170,7 @@ test("pilot entries require a registered device and trusted server mutation", as
     call(publish, f.ctx, {
       googleId,
       tokenHash,
+      sessionId,
       body: "Route update",
       systemSecret: "wrong",
     }),
@@ -170,6 +179,7 @@ test("pilot entries require a registered device and trusted server mutation", as
   const id = await call<string>(publish, f.ctx, {
     googleId,
     tokenHash,
+    sessionId,
     body: "Route update",
     systemSecret,
   });
@@ -191,7 +201,13 @@ test("pilot entries require a registered device and trusted server mutation", as
     ).retryAfter,
   );
   await assert.rejects(
-    call(publish, f.ctx, { googleId, tokenHash, body: "Again", systemSecret }),
+    call(publish, f.ctx, {
+      googleId,
+      tokenHash,
+      sessionId,
+      body: "Again",
+      systemSecret,
+    }),
     /Wait 30 seconds/,
   );
   await assert.rejects(
@@ -218,6 +234,7 @@ test("existing account ban blocks ACARS publication and hides entries", async ()
   await call(publish, f.ctx, {
     googleId,
     tokenHash,
+    sessionId,
     body: "Before ban",
     systemSecret,
   });
@@ -228,11 +245,84 @@ test("existing account ban blocks ACARS publication and hides entries", async ()
     call(publish, f.ctx, {
       googleId,
       tokenHash,
+      sessionId,
       body: "After ban",
       systemSecret,
     }),
     /restricted/,
   );
+  assert.deepEqual(await call(listPublic, f.ctx, { googleId }), []);
+});
+
+test("ACARS entries are visible only in their active flight", async () => {
+  const f = fixture();
+  await call(registerDevice, f.ctx, { googleId, tokenHash, systemSecret });
+  await call(publish, f.ctx, {
+    googleId,
+    tokenHash,
+    sessionId,
+    body: "First flight",
+    systemSecret,
+  });
+  await call(setFlightSession, f.ctx, {
+    googleId,
+    tokenHash,
+    sessionId: nextSessionId,
+    active: true,
+    systemSecret,
+  });
+  assert.deepEqual(await call(listPublic, f.ctx, { googleId }), []);
+  assert.deepEqual(
+    await call(listForDevice, f.ctx, { googleId, tokenHash }),
+    [],
+  );
+  assert.deepEqual(
+    await call(reservePosting, f.ctx, {
+      googleId,
+      tokenHash,
+      sessionId,
+      systemSecret,
+    }),
+    { allowed: false, retryAfter: 0 },
+  );
+  await assert.rejects(
+    call(publish, f.ctx, {
+      googleId,
+      tokenHash,
+      sessionId,
+      body: "Late first flight",
+      systemSecret,
+    }),
+    /no longer active/,
+  );
+  await call(setFlightSession, f.ctx, {
+    googleId,
+    tokenHash,
+    sessionId,
+    active: false,
+    systemSecret,
+  });
+  assert.equal(f.tables.acarsFlightSessions[0].active, true);
+  f.tables.acarsMessages[0].createdAt -= 60_000;
+  await call(publish, f.ctx, {
+    googleId,
+    tokenHash,
+    sessionId: nextSessionId,
+    body: "Second flight",
+    systemSecret,
+  });
+  const current = await call<any[]>(listPublic, f.ctx, { googleId });
+  assert.deepEqual(
+    current.map((entry) => entry.body),
+    ["Second flight"],
+  );
+  await call(setFlightSession, f.ctx, {
+    googleId,
+    tokenHash,
+    sessionId: nextSessionId,
+    active: false,
+    systemSecret,
+  });
   assert.deepEqual(await call(listPublic, f.ctx, { googleId }), []);
 });
 
@@ -273,6 +363,7 @@ test("blocked and published attempts share the mutation cooldown", async () => {
   await call(recordBlocked, f.ctx, {
     googleId,
     tokenHash,
+    sessionId,
     body: "Blocked sample",
     categories: ["harassment"],
     systemSecret,
@@ -281,6 +372,7 @@ test("blocked and published attempts share the mutation cooldown", async () => {
     call(recordBlocked, f.ctx, {
       googleId,
       tokenHash,
+      sessionId,
       body: "Blocked again",
       categories: ["harassment"],
       systemSecret,
@@ -291,6 +383,7 @@ test("blocked and published attempts share the mutation cooldown", async () => {
     call(publish, f.ctx, {
       googleId,
       tokenHash,
+      sessionId,
       body: "Publish after block",
       systemSecret,
     }),
@@ -306,6 +399,7 @@ test("account export pages include earlier GeoFS entries and filed reports", asy
   await call(publish, f.ctx, {
     googleId,
     tokenHash,
+    sessionId,
     body: "Linked entry",
     systemSecret,
   });
@@ -362,6 +456,7 @@ test("reported entries and blocked attempts appear in admin review", async () =>
   const id = await call<string>(publish, f.ctx, {
     googleId,
     tokenHash,
+    sessionId,
     body: "Pilot update",
     systemSecret,
   });
@@ -378,6 +473,7 @@ test("reported entries and blocked attempts appear in admin review", async () =>
   await call(recordBlocked, f.ctx, {
     googleId,
     tokenHash,
+    sessionId,
     body: "Blocked sample",
     categories: ["harassment"],
     systemSecret,
@@ -404,6 +500,7 @@ test("own ACARS reports return a user-facing status without creating a report", 
   const id = await call<string>(publish, f.ctx, {
     googleId,
     tokenHash,
+    sessionId,
     body: "Pilot update",
     systemSecret,
   });
@@ -458,11 +555,13 @@ test("posting reservation stops a second moderation attempt", async () => {
   const first = await call<any>(reservePosting, f.ctx, {
     googleId,
     tokenHash,
+    sessionId,
     systemSecret,
   });
   const second = await call<any>(reservePosting, f.ctx, {
     googleId,
     tokenHash,
+    sessionId,
     systemSecret,
   });
   assert.equal(first.allowed, true);
@@ -471,6 +570,7 @@ test("posting reservation stops a second moderation attempt", async () => {
   await call(recordBlocked, f.ctx, {
     googleId,
     tokenHash,
+    sessionId,
     body: "Flagged",
     categories: ["harassment"],
     systemSecret,

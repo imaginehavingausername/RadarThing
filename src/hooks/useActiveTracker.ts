@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useMutation } from "convex/react";
+import { useConvexAuth, useMutation } from "convex/react";
 import { useUser } from "@clerk/nextjs";
 import { api } from "../../convex/_generated/api";
 import { type PositionUpdate } from "~/lib/aircraft-store";
@@ -20,11 +20,12 @@ function createAnonTrackerId() {
 }
 
 export function useActiveTracker(selectedAircrafts: PositionUpdate[]) {
-  const { user } = useUser();
+  const { user, isLoaded, isSignedIn } = useUser();
+  const { isAuthenticated } = useConvexAuth();
   const startTracking = useMutation(api.activeTrackers.startTracking);
   const stopTracking = useMutation(api.activeTrackers.stopTracking);
   const heartbeat = useMutation(api.activeTrackers.heartbeat);
-  const prevTrackedKeyRef = useRef<string>("");
+  const prevTrackedRef = useRef({ trackerId: null as string | null, key: "" });
   const [anonTrackerId, setAnonTrackerId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -41,7 +42,13 @@ export function useActiveTracker(selectedAircrafts: PositionUpdate[]) {
     setAnonTrackerId(created);
   }, []);
 
-  const trackerId = user?.id ?? anonTrackerId;
+  const trackerId = !isLoaded
+    ? null
+    : isSignedIn
+      ? isAuthenticated
+        ? (user?.id ?? null)
+        : null
+      : anonTrackerId;
   const trackedCallsigns = useMemo(() => {
     return Array.from(
       new Set(
@@ -55,17 +62,21 @@ export function useActiveTracker(selectedAircrafts: PositionUpdate[]) {
 
   // Start/stop tracking when selection changes
   useEffect(() => {
-    if (!trackerId) return;
+    if (!trackerId) {
+      prevTrackedRef.current = { trackerId: null, key: "" };
+      return;
+    }
 
-    if (trackedKey === prevTrackedKeyRef.current) return;
+    const previous = prevTrackedRef.current;
+    if (trackerId === previous.trackerId && trackedKey === previous.key) return;
 
     if (trackedCallsigns.length > 0) {
       void startTracking({ clerkId: trackerId, callsigns: trackedCallsigns });
-    } else {
+    } else if (previous.trackerId === trackerId && previous.key) {
       void stopTracking({ clerkId: trackerId });
     }
 
-    prevTrackedKeyRef.current = trackedKey;
+    prevTrackedRef.current = { trackerId, key: trackedKey };
   }, [trackerId, trackedCallsigns, trackedKey, startTracking, stopTracking]);
 
   // Heartbeat every 60 seconds while tracking

@@ -4,6 +4,24 @@ import { mutation, query, internalMutation } from "./_generated/server";
 import { requireAuthenticatedClerkId } from "./lib/auth";
 
 const MIN_TRACKERS_FOR_MOST_TRACKED = 3;
+const ANONYMOUS_TRACKER_ID =
+  /^anon:(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[a-z0-9]+:[a-z0-9]+)$/i;
+
+async function requireTrackerAccess(
+  ctx: Parameters<typeof requireAuthenticatedClerkId>[0],
+  trackerId: string,
+) {
+  if (ANONYMOUS_TRACKER_ID.test(trackerId)) {
+    // Anonymous visitors have a random, browser-persisted tracker ID.
+    // Still enforce account restrictions if an authenticated user sends one.
+    if (await ctx.auth.getUserIdentity()) {
+      await requireAuthenticatedClerkId(ctx);
+    }
+    return;
+  }
+
+  await requireAuthenticatedClerkId(ctx, trackerId);
+}
 
 function getRankedTrackerCounts(
   trackers: { callsign: string }[],
@@ -26,7 +44,7 @@ export const startTracking = mutation({
     callsigns: v.array(v.string()),
   },
   handler: async (ctx, args) => {
-    await requireAuthenticatedClerkId(ctx, args.clerkId);
+    await requireTrackerAccess(ctx, args.clerkId);
     const callsigns = Array.from(
       new Set(
         args.callsigns.map((callsign) => callsign.trim()).filter(Boolean),
@@ -58,7 +76,7 @@ export const stopTracking = mutation({
     clerkId: v.string(),
   },
   handler: async (ctx, args) => {
-    await requireAuthenticatedClerkId(ctx, args.clerkId);
+    await requireTrackerAccess(ctx, args.clerkId);
     const existing = await ctx.db
       .query("activeTrackers")
       .withIndex("by_clerkId", (q) => q.eq("clerkId", args.clerkId))
@@ -75,7 +93,7 @@ export const heartbeat = mutation({
     clerkId: v.string(),
   },
   handler: async (ctx, args) => {
-    await requireAuthenticatedClerkId(ctx, args.clerkId);
+    await requireTrackerAccess(ctx, args.clerkId);
     const existing = await ctx.db
       .query("activeTrackers")
       .withIndex("by_clerkId", (q) => q.eq("clerkId", args.clerkId))

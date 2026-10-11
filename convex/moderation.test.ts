@@ -18,7 +18,7 @@ import { requireAdmin, requireAuthenticatedClerkId } from "./lib/auth";
 import { SUPER_ADMIN_GOOGLE_ID } from "./lib/moderationRules";
 import { storeUser, update, updateByClerkId } from "./users";
 import { create as createFlight } from "./flights";
-import { startTracking } from "./activeTrackers";
+import { heartbeat, startTracking, stopTracking } from "./activeTrackers";
 import { replaceAll } from "./activeFlightSessions";
 import { hasEffectiveProAccess } from "../src/lib/proAccess";
 
@@ -203,6 +203,13 @@ test("ban removes tracking, rejects duplicate bans and enforces backend restrict
     call(startTracking, f.ctx, { clerkId: "pilot", callsigns: ["TEST"] }),
     /restricted/,
   );
+  await assert.rejects(
+    call(startTracking, f.ctx, {
+      clerkId: "anon:123e4567-e89b-42d3-a456-426614174000",
+      callsigns: ["TEST"],
+    }),
+    /restricted/,
+  );
   process.env.CONVEX_SYSTEM_SECRET = "test-secret";
   await assert.rejects(
     call(createFlight, f.ctx, { userId: "pilot", systemSecret: "test-secret" }),
@@ -214,6 +221,33 @@ test("ban removes tracking, rejects duplicate bans and enforces backend restrict
     systemSecret: "test-secret",
   });
   assert.equal(persisted.saved, 0);
+});
+
+test("anonymous trackers can start, heartbeat, and stop without Clerk auth", async () => {
+  const f = fixture("");
+  const clerkId = "anon:123e4567-e89b-42d3-a456-426614174000";
+  await call(startTracking, f.ctx, { clerkId, callsigns: ["TEST"] });
+  assert.equal(f.tables.activeTrackers?.length, 1);
+  assert.equal(f.tables.activeTrackers?.[0]?.clerkId, clerkId);
+  f.tables.activeTrackers[0]!.lastSeen = 0;
+  await call(heartbeat, f.ctx, { clerkId });
+  assert.ok(f.tables.activeTrackers?.[0]?.lastSeen > 0);
+  await call(stopTracking, f.ctx, { clerkId });
+  assert.equal(f.tables.activeTrackers?.length, 0);
+
+  await assert.rejects(
+    call(startTracking, f.ctx, { clerkId: "pilot", callsigns: ["TEST"] }),
+    /Unauthorized/,
+  );
+  await assert.rejects(
+    call(startTracking, f.ctx, { clerkId: "anon:guess", callsigns: ["TEST"] }),
+    /Unauthorized/,
+  );
+  f.as("admin");
+  await assert.rejects(
+    call(startTracking, f.ctx, { clerkId: "pilot", callsigns: ["TEST"] }),
+    /Unauthorized/,
+  );
 });
 
 test("only super-admin can reverse actions; original history and audit remain", async () => {

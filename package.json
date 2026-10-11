@@ -7,6 +7,7 @@
     "dev": "next dev --turbo",
     "build": "node scripts/build-userscript.mjs && next build",
     "build:userscript": "node scripts/build-userscript.mjs",
+    "build:userscript:dev": "node scripts/build-dev-userscript.mjs",
     "backup:convex": "tsx scripts/backup-convex-to-uploadthing.ts",
     "convex:dev": "convex dev",
     "sync:convex:prod-to-dev": "tsx scripts/sync-convex-prod-to-dev.ts",

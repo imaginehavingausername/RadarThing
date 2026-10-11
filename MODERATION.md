@@ -8,6 +8,10 @@ Bans have no automatic expiry. They block authenticated site use, uploads, mutat
 
 Warnings do not restrict access. Pending warnings appear on the next full RT visit/reload or account sign-in, using the server timestamp from that visit's initial status snapshot. Navigating between pages within the same visit does not start a new session. Each warning remains pending until acknowledged; acknowledgment does not revoke it. Revoked warnings are omitted from pending notices.
 
+## Pilot ACARS
+
+GeoFS pilots can publish ACARS entries during an active flight without a linked RadarThing account. Text is screened by the OpenAI Moderation API before publication. Flagged entries are rejected and logged for admin review. Screening failures also prevent publication. An atomic 30-second reservation limits screening attempts. Signed-in viewers can report published entries. Admins review paged blocked entries and reports at `/admin/acars-moderation`, remove reported entries, release device claims by GeoFS ID, and use the existing warning and ban controls for pilots with linked RadarThing accounts. New device claims are limited to eight attempts per IP per hour; existing device registrations remain idempotent. The rate limit stores a secret-hashed IP identifier. Unlinked GeoFS pilots have no RT account to warn or ban. A GeoFS userscript cannot provide a trusted ownership token, so anonymous ACARS device registration identifies the browser but does not cryptographically prove ownership of the claimed GeoFS account.
+
 ## Deployment
 
 - Deploy the Convex schema/functions and the Next.js app together. Deploy Convex first: the updated app calls the new moderation functions. Refresh existing clients after deployment because account synchronization now runs through a trusted server action.

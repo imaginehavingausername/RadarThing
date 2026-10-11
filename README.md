@@ -35,6 +35,7 @@ Tampermonkey installs are persistent. Console installs use the same hosted loade
 - **Remote aircraft commands** for supported clients, including speed, altitude, heading, vertical speed, squawk, flaps, NAV/HDG mode, waypoint selection, autopilot toggles, and IDENT requests.
 - **Flight plan drawing** with waypoint speed and altitude details.
 - **Waypoint ETAs** and remaining route distance for active flights.
+- **Pilot ACARS** updates composed in the GeoFS userscript and shown in the selected aircraft sidebar.
 - **Conflict alerts** with a recent review log.
 - **Keyboard shortcut reference** built into the radar dock.
 - **Display unit preferences** for speed and altitude.
@@ -93,12 +94,16 @@ Generated userscript files are built into `public/userscript/` and `radarthing.u
 pnpm run build:userscript
 ```
 
+To test unpublished userscript changes in GeoFS, run `pnpm run build:userscript:dev` and install the generated `radarthing.dev.user.js` in Tampermonkey. This standalone build uses the current branch code and sends ACARS requests to `http://localhost:3000`; run `pnpm dev` for the local website and API. Disable the regular RadarThing userscript while testing to avoid loading both copies. The local app needs its Convex functions and `OPENAI_API_KEY` configured for ACARS publishing.
+
 The public install flow is:
 
 1. `/userscript` redirects Tampermonkey users to `/userscript/radarthing.user.js`.
 2. The installer loads `/loader`.
 3. The loader reads `/userscript/latest.json`.
 4. The current runtime bundle is loaded, with a stable bundle fallback.
+
+ACARS entries can be published from the GeoFS panel after saving an active flight. They appear on RadarThing as soon as the pilot publishes or removes them. Set the server-only `OPENAI_API_KEY` in the Next.js deployment to screen text before publication; publishing fails closed while screening is unavailable. Viewer reports and blocked submissions are reviewed at `/admin/acars-moderation`.
 
 ## Attribution
 

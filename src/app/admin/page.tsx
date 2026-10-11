@@ -26,6 +26,7 @@ import {
 } from "~/components/ui/select";
 
 import { ModerationTab } from "./_components/ModerationTab";
+import { AcarsModerationTab } from "./_components/AcarsModerationTab";
 import { AdminHeader } from "./_components/AdminHeader";
 import { AdminAccessDenied } from "./_components/AdminAccessDenied";
 import { AdminSkeleton, AdminTabSkeleton } from "./_components/skeletons";
@@ -208,6 +209,7 @@ export default function AdminPage() {
     },
     { value: "charts", label: "Airport Charts" },
     { value: "moderation", label: "Moderation" },
+    { value: "acars-moderation", label: "ACARS auto-mod" },
     {
       value: "virtual-airlines",
       label: "Virtual Airlines",
@@ -335,6 +337,13 @@ export default function AdminPage() {
             <Flag className="h-4 w-4" />
             Moderation
           </button>
+          <button
+            onClick={() => router.push(getAdminTabHref("acars-moderation"))}
+            className={`flex cursor-pointer items-center gap-2 rounded-lg px-4 py-2.5 font-medium transition-all ${mainTab === "acars-moderation" ? "bg-amber-500/20 text-amber-300" : "bg-white/5 text-slate-400 hover:bg-white/10"}`}
+          >
+            <Flag className="h-4 w-4" />
+            ACARS auto-mod
+          </button>
           {isSuperAdmin && (
             <button
               onClick={() => router.push(getAdminTabHref("activity"))}
@@ -355,6 +364,7 @@ export default function AdminPage() {
         )}
         {mainTab === "charts" && <AirportChartsTab />}
         {mainTab === "moderation" && <ModerationTab />}
+        {mainTab === "acars-moderation" && <AcarsModerationTab />}
         {mainTab === "challenges" && (
           <ChallengesTab canRunAdminQueries={canRunAdminQueries} />
         )}

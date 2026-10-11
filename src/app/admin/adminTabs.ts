@@ -6,6 +6,7 @@ export const ADMIN_TABS = [
   "pro",
   "activity",
   "moderation",
+  "acars-moderation",
 ] as const;
 
 export type MainTab = (typeof ADMIN_TABS)[number];

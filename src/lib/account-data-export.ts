@@ -1,4 +1,4 @@
-export const RADARTHING_ACCOUNT_DATA_EXPORT_VERSION = 1;
+export const RADARTHING_ACCOUNT_DATA_EXPORT_VERSION = 3;
 
 export interface RadarThingAccountDataExport {
   schema: "radarthing.account_data";
@@ -39,6 +39,28 @@ export interface RadarThingAccountDataExport {
     maxSpeed?: number;
     routeData?: unknown;
   }[];
+  acars: {
+    messages: {
+      id: string;
+      googleId: string;
+      body: string;
+      createdAt: number;
+    }[];
+    blocked: {
+      id: string;
+      googleId: string;
+      body: string;
+      categories: string[];
+      createdAt: number;
+    }[];
+    reports: {
+      id: string;
+      googleId: string;
+      body: string;
+      reason: string;
+      createdAt: number;
+    }[];
+  };
 }
 
 export function createAccountDataExportFilename(

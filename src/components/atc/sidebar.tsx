@@ -90,6 +90,7 @@ import { useAircraftPhoto } from "~/hooks/useAircraftPhoto";
 import { useCurrentUserProfile } from "~/hooks/useCurrentUserProfile";
 import { AdSenseInContent } from "~/components/ads/AdSenseInContent";
 import { AircraftControlPanel } from "./AircraftControlPanel";
+import { AcarsPanel } from "./AcarsPanel";
 import Link from "next/link";
 import { Analytics } from "~/lib/analytics";
 import { useUnitPreferences } from "~/hooks/useUnitPreferences";
@@ -822,6 +823,8 @@ export const Sidebar = ({
               </button>
             )}
           </div>
+
+          <AcarsPanel googleId={aircraft.googleId} />
 
           <div
             className="animate-fade-in-up grid grid-cols-3 gap-1.5 rounded-2xl border border-white/10 bg-black/40 p-1.5 shadow-inner"

@@ -40,7 +40,8 @@ export default function PrivacyPage() {
           </li>
           <li>
             Content you submit, including aircraft images, airport charts,
-            filenames, attribution details, and moderation records.
+            public pilot ACARS entries, filenames, attribution details, viewer
+            reports, and moderation records.
           </li>
           <li>
             Subscription and transaction references. Stripe processes full
@@ -69,10 +70,11 @@ export default function PrivacyPage() {
         <p>
           We use Clerk for authentication, Convex for application data,
           UploadThing for uploaded files, Stripe for payments, Resend for
-          transactional email, PostHog for optional analytics, and Google
-          AdSense for free-tier advertising. These providers process information
-          under their own terms and may process it outside the United Kingdom;
-          we rely on applicable contractual and legal transfer safeguards.
+          transactional email, OpenAI for screening ACARS text before
+          publication, PostHog for optional analytics, and Google AdSense for
+          free-tier advertising. These providers process information under their
+          own terms and may process it outside the United Kingdom; we rely on
+          applicable contractual and legal transfer safeguards.
         </p>
         <p>
           We may also disclose information where legally required, to protect
@@ -128,10 +130,12 @@ export default function PrivacyPage() {
           Account and flight data is retained while your account is active or
           until you delete it, subject to backups and legal requirements.
           Pending uploads are retained through moderation; approved public
-          submissions remain until removed or replaced. Transaction records are
-          kept as needed for accounting and legal obligations. Security and
-          diagnostic records are retained only for as long as reasonably needed
-          for those purposes. Provider retention periods may also apply.
+          submissions and ACARS entries remain until removed or replaced.
+          Blocked ACARS attempts and reports may be retained for admin review.
+          Transaction records are kept as needed for accounting and legal
+          obligations. Security and diagnostic records are retained only for as
+          long as reasonably needed for those purposes. Provider retention
+          periods may also apply.
         </p>
       </LegalSection>
 

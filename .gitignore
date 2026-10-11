@@ -57,5 +57,6 @@ convex-backup/
 
 # generated userscript artifacts
 /radarthing.user.js
+/radarthing.dev.user.js
 /public/userscript/
 .env.local

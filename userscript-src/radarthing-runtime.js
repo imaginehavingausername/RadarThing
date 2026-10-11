@@ -42,6 +42,12 @@
   const TRACKING_STATUS_API =
     "https://radarthing.com/api/userscript/tracking-status";
   const TRACKING_STATUS_POLL_INTERVAL_MS = 15000;
+  const ACARS_API = "https://radarthing.com/api/userscript/acars";
+  const ACARS_DEVICE_API = `${ACARS_API}/device`;
+  const ACARS_PANEL_ID = "radarthing-acars-panel";
+  const ACARS_DRAFT_ID = "radarthing-acars-draft";
+  const ACARS_PUBLISH_ID = "radarthing-acars-publish";
+  const ACARS_LIST_ID = "radarthing-acars-list";
 
   let flightUI;
   let mobileFlightUIOpenButton;
@@ -55,6 +61,133 @@
   let resumeModalResolver = null;
   let flightActiveForTrackingBadge = false;
   let trackingStatusRequestId = 0;
+  let acarsBusy = false;
+  let acarsRequestId = 0;
+
+  function acarsPilotId() {
+    const id = String(window.geofs?.userRecord?.googleid || "");
+    return /^\d{8,32}$/.test(id) ? id : "";
+  }
+
+  function acarsDeviceToken(googleId) {
+    const key = `radarthing-acars-device-${googleId}`;
+    let token = localStorage.getItem(key);
+    if (token && /^[a-f0-9]{64}$/.test(token)) return token;
+    const bytes = new Uint8Array(32);
+    crypto.getRandomValues(bytes);
+    token = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+    localStorage.setItem(key, token);
+    return token;
+  }
+
+  function acarsHeaders(token) {
+    return {
+      "Content-Type": "application/json",
+      "X-Requested-With": "GeoFS-RadarThing",
+      ...(token ? { "X-ACARS-Token": token } : {}),
+    };
+  }
+
+  function updateAcarsAvailability() {
+    const panel = document.getElementById(ACARS_PANEL_ID);
+    const button = document.getElementById(ACARS_PUBLISH_ID);
+    const draft = document.getElementById(ACARS_DRAFT_ID);
+    const active = flightActiveForTrackingBadge && Boolean(acarsPilotId());
+    if (panel) panel.style.display = active ? "block" : "none";
+    if (button) button.disabled = !active || acarsBusy;
+    if (draft) draft.disabled = !active || acarsBusy;
+  }
+
+  async function refreshAcars() {
+    const list = document.getElementById(ACARS_LIST_ID);
+    const googleId = acarsPilotId();
+    const requestId = ++acarsRequestId;
+    if (!list || !flightActiveForTrackingBadge || !googleId) return;
+    try {
+      const token = localStorage.getItem(`radarthing-acars-device-${googleId}`);
+      const response = await fetch(`${ACARS_API}?googleId=${encodeURIComponent(googleId)}`, {
+        cache: "no-store", headers: acarsHeaders(token),
+      });
+      if (!response.ok) throw new Error("Could not load ACARS entries");
+      const data = await response.json();
+      if (requestId !== acarsRequestId || acarsPilotId() !== googleId) return;
+      list.replaceChildren();
+      for (const message of data.messages || []) {
+        const row = document.createElement("div");
+        row.style.cssText = "border-top:1px solid rgba(255,255,255,.08);padding:8px 0;font-size:11px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere";
+        const time = document.createElement("div");
+        time.style.cssText = "font-size:9px;color:#67e8f9;margin-bottom:3px";
+        time.textContent = new Date(message.createdAt).toLocaleString();
+        const content = document.createElement("div");
+        content.textContent = message.body;
+        row.append(time, content);
+        if (message.canRemove) {
+          const remove = document.createElement("button");
+          remove.type = "button";
+          remove.textContent = "Remove";
+          remove.style.cssText = "margin-top:4px;padding:0;border:0;background:none;color:#fca5a5;font-size:9px;cursor:pointer";
+          remove.addEventListener("click", () => void removeAcars(message._id));
+          row.appendChild(remove);
+        }
+        list.appendChild(row);
+      }
+      if (!data.messages?.length) list.textContent = "No ACARS entries yet.";
+    } catch (_) {
+      if (requestId === acarsRequestId) list.textContent = "Could not load ACARS entries.";
+    }
+  }
+
+  async function removeAcars(messageId) {
+    const googleId = acarsPilotId();
+    const token = googleId && localStorage.getItem(`radarthing-acars-device-${googleId}`);
+    if (!googleId || !token || !flightActiveForTrackingBadge) return;
+    try {
+      const response = await fetch(ACARS_API, {
+        method: "DELETE", headers: acarsHeaders(token),
+        body: JSON.stringify({ googleId, messageId }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Could not remove ACARS entry");
+      showToast("ACARS entry removed");
+      await refreshAcars();
+    } catch (error) {
+      showToast(error?.message || "Could not remove ACARS entry", true);
+    }
+  }
+
+  async function publishAcars() {
+    const draft = document.getElementById(ACARS_DRAFT_ID);
+    const googleId = acarsPilotId();
+    const body = draft?.value.trim() || "";
+    if (!flightActiveForTrackingBadge || !googleId) return showToast("Save an active flight while signed in to GeoFS", true);
+    if (!body || body.length > 500) return showToast("Enter 1–500 ACARS characters", true);
+    if (acarsBusy) return;
+    acarsBusy = true;
+    updateAcarsAvailability();
+    try {
+      const token = acarsDeviceToken(googleId);
+      const registration = await fetch(ACARS_DEVICE_API, {
+        method: "POST", headers: acarsHeaders(token),
+        body: JSON.stringify({ googleId }),
+      });
+      const registered = await registration.json();
+      if (!registration.ok) throw new Error(registered.error || "ACARS registration failed");
+      const response = await fetch(ACARS_API, {
+        method: "POST", headers: acarsHeaders(token),
+        body: JSON.stringify({ googleId, body }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "ACARS publish failed");
+      draft.value = "";
+      showToast("ACARS published");
+      await refreshAcars();
+    } catch (error) {
+      showToast(error?.message || "ACARS publish failed", true);
+    } finally {
+      acarsBusy = false;
+      updateAcarsAvailability();
+    }
+  }
   function loadRadarPrefs() {
     try {
       const raw = localStorage.getItem(RADAR_PREFS_KEY);
@@ -1890,6 +2023,8 @@
       top:72px;
       right:16px;
       width:260px;
+      max-height:calc(100dvh - 88px);
+      overflow-y:auto;
       padding:16px;
       background:rgba(2,6,23,0.75);
       backdrop-filter:blur(18px);
@@ -1999,6 +2134,14 @@
         <span style="font-size:9px;font-weight:800;letter-spacing:0.12em;text-transform:uppercase;">#1 Most tracked</span>
         <span data-tracker-count style="margin-left:auto;font-size:9px;color:#fbbf24;white-space:nowrap;"></span>
       </div>
+
+      <section id="${ACARS_PANEL_ID}" style="display:none;margin:0 0 14px;padding:10px;border:1px solid rgba(34,211,238,.22);border-radius:10px;background:rgba(8,47,73,.24)">
+        <div style="font-size:10px;font-weight:700;letter-spacing:.14em;color:#67e8f9;margin-bottom:7px">ACARS</div>
+        <textarea id="${ACARS_DRAFT_ID}" maxlength="500" rows="3" placeholder="Write a flight update for viewers…" aria-label="New ACARS entry" style="box-sizing:border-box;width:100%;resize:vertical;padding:8px;border:1px solid rgba(255,255,255,.14);border-radius:7px;background:rgba(2,6,23,.75);color:#fff;font:11px system-ui"></textarea>
+        <div style="margin-top:4px;color:#94a3b8;font-size:9px">Visible to viewers until removed.</div>
+        <button id="${ACARS_PUBLISH_ID}" type="button" style="width:100%;margin-top:7px;padding:8px;border:1px solid rgba(34,211,238,.35);border-radius:7px;background:rgba(34,211,238,.14);color:#67e8f9;font-size:10px;font-weight:700;cursor:pointer">Publish ACARS</button>
+        <div id="${ACARS_LIST_ID}" aria-live="polite" style="margin-top:8px;max-height:160px;overflow-y:auto;color:#cbd5e1;font-size:10px">No ACARS entries yet.</div>
+      </section>
 
       <div style="display:grid; gap:10px;">
         ${buildInputRow("DEP", DEP_INPUT_ID, "ICAO")}
@@ -2167,6 +2310,8 @@
     clampFlightUiToViewport();
     makeFlightUiMovable();
     updateSignInNotice();
+    updateAcarsAvailability();
+    document.getElementById(ACARS_PUBLISH_ID).addEventListener("click", () => void publishAcars());
 
     if (isMobile) {
       mobileFlightUIOpenButton = document.createElement("button");
@@ -2921,12 +3066,16 @@
       flightActiveForTrackingBadge = false;
       trackingStatusRequestId += 1;
       hideMostTrackedBadge();
+      acarsRequestId += 1;
+      updateAcarsAvailability();
       return;
     }
     fillFlightForm(detail);
     if (detail.active === true) {
       flightActiveForTrackingBadge = true;
       void refreshMostTrackedBadge();
+      updateAcarsAvailability();
+      void refreshAcars();
     }
   });
 

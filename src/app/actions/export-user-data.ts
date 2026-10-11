@@ -1,6 +1,7 @@
 "use server";
 
 import { auth } from "@clerk/nextjs/server";
+import { ConvexHttpClient } from "convex/browser";
 import { api, convex } from "~/server/convex";
 import {
   RADARTHING_ACCOUNT_DATA_EXPORT_VERSION,
@@ -8,7 +9,7 @@ import {
 } from "~/lib/account-data-export";
 
 export async function getCurrentUserDataExport(): Promise<RadarThingAccountDataExport> {
-  const { userId } = await auth();
+  const { userId, getToken } = await auth();
   if (!userId) {
     throw new Error("You must be signed in to export your data");
   }
@@ -21,10 +22,58 @@ export async function getCurrentUserDataExport(): Promise<RadarThingAccountDataE
     throw new Error("Your RadarThing account could not be found");
   }
 
-  const [stats, flights] = await Promise.all([
+  const token = await getToken({ template: "convex" });
+  if (!token) throw new Error("You must be signed in to export your data");
+  const exportConvex = new ConvexHttpClient(
+    process.env.NEXT_PUBLIC_CONVEX_URL!,
+  );
+  exportConvex.setAuth(token);
+  const [
+    stats,
+    flights,
+    messagesByUser,
+    messagesByGoogle,
+    blockedByUser,
+    blockedByGoogle,
+    reports,
+  ] = await Promise.all([
     convex.query(api.flights.getStatsByClerkId, { clerkId: userId }),
     convex.query(api.flights.getByUserId, { userId: user._id }),
+    loadAll((cursor) =>
+      exportConvex.query(api.acars.exportMessages, {
+        source: "user",
+        paginationOpts: { numItems: 100, cursor },
+      }),
+    ),
+    loadAll((cursor) =>
+      exportConvex.query(api.acars.exportMessages, {
+        source: "google",
+        paginationOpts: { numItems: 100, cursor },
+      }),
+    ),
+    loadAll((cursor) =>
+      exportConvex.query(api.acars.exportBlocked, {
+        source: "user",
+        paginationOpts: { numItems: 100, cursor },
+      }),
+    ),
+    loadAll((cursor) =>
+      exportConvex.query(api.acars.exportBlocked, {
+        source: "google",
+        paginationOpts: { numItems: 100, cursor },
+      }),
+    ),
+    loadAll((cursor) =>
+      exportConvex.query(api.acars.exportReports, {
+        paginationOpts: { numItems: 100, cursor },
+      }),
+    ),
   ]);
+  const acars = {
+    messages: dedupeById([...messagesByUser, ...messagesByGoogle]),
+    blocked: dedupeById([...blockedByUser, ...blockedByGoogle]),
+    reports,
+  };
 
   return {
     schema: "radarthing.account_data",
@@ -40,6 +89,7 @@ export async function getCurrentUserDataExport(): Promise<RadarThingAccountDataE
       createdAt: user._creationTime,
     },
     stats: serializeStats(stats),
+    acars,
     flights: flights
       .sort((a, b) => b.startTime - a.startTime)
       .map((flight) => ({
@@ -58,6 +108,29 @@ export async function getCurrentUserDataExport(): Promise<RadarThingAccountDataE
         routeData: flight.routeData,
       })),
   };
+}
+
+async function loadAll<T>(
+  fetchPage: (
+    cursor: string | null,
+  ) => Promise<{ page: T[]; continueCursor: string; isDone: boolean }>,
+): Promise<T[]> {
+  const rows: T[] = [];
+  let cursor: string | null = null;
+  for (;;) {
+    const page = await fetchPage(cursor);
+    rows.push(...page.page);
+    if (page.isDone) return rows;
+    cursor = page.continueCursor;
+  }
+}
+
+function dedupeById<T extends { id: string; createdAt: number }>(
+  rows: T[],
+): T[] {
+  return [...new Map(rows.map((row) => [row.id, row])).values()].sort(
+    (a, b) => b.createdAt - a.createdAt,
+  );
 }
 
 function serializeStats(

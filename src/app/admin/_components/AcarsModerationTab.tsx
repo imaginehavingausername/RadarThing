@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { ModerationControls } from "~/components/moderation/ModerationControls";
+import { moderationErrorMessage } from "~/lib/moderation-error";
 
 export function AcarsModerationTab() {
   const reports = usePaginatedQuery(
@@ -53,17 +54,18 @@ export function AcarsModerationTab() {
             key={pilot._id}
             className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 py-3 last:border-0"
           >
-            <div className="min-w-0">
-              <Link
-                href={`/pilot/${pilot._id}`}
-                className="text-sm font-semibold break-all text-cyan-300 hover:underline"
-              >
+            <Link
+              href={`/pilot/${pilot._id}`}
+              className="group block min-w-0 hover:underline"
+              aria-label={`Open ${pilot.label}'s profile`}
+            >
+              <span className="block text-sm font-semibold break-all text-cyan-300">
                 {pilot.label}
-              </Link>
-              <p className="text-xs break-all text-slate-400">
+              </span>
+              <span className="block text-xs break-all text-slate-400">
                 RT ID: {pilot._id}
-              </p>
-            </div>
+              </span>
+            </Link>
             <button
               type="button"
               onClick={() => setReleaseRtId(pilot._id)}
@@ -107,8 +109,13 @@ export function AcarsModerationTab() {
                   count ? "Device claim released" : "No device claim found",
                 );
                 setReleaseRtId("");
-              } catch {
-                toast.error("Could not release device claim");
+              } catch (error) {
+                toast.error(
+                  moderationErrorMessage(
+                    error,
+                    "Could not release the device claim. Check the RT ID and try again.",
+                  ),
+                );
               }
             }}
           >
@@ -149,25 +156,27 @@ export function AcarsModerationTab() {
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {item.isMessagePresent && (
-                      <button
-                        className="rounded-lg border border-red-400/20 px-3 py-1.5 text-xs text-red-300 hover:bg-red-500/10"
-                        onClick={async () => {
-                          try {
-                            await remove({ messageId: item.messageId });
-                            toast.success("ACARS entry removed");
-                          } catch (error) {
-                            toast.error(
-                              error instanceof Error
-                                ? error.message
-                                : "Removal failed",
-                            );
-                          }
-                        }}
-                      >
-                        Remove entry
-                      </button>
-                    )}
+                    {item.isMessagePresent &&
+                      !item.moderationDisabledReason && (
+                        <button
+                          className="rounded-lg border border-red-400/20 px-3 py-1.5 text-xs text-red-300 hover:bg-red-500/10"
+                          onClick={async () => {
+                            try {
+                              await remove({ messageId: item.messageId });
+                              toast.success("ACARS entry removed");
+                            } catch (error) {
+                              toast.error(
+                                moderationErrorMessage(
+                                  error,
+                                  "Could not remove the ACARS entry. Please try again.",
+                                ),
+                              );
+                            }
+                          }}
+                        >
+                          Remove entry
+                        </button>
+                      )}
                     {!item.reviewedAt && (
                       <button
                         className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-slate-200 hover:bg-white/10"
@@ -177,9 +186,10 @@ export function AcarsModerationTab() {
                             toast.success("Report reviewed");
                           } catch (error) {
                             toast.error(
-                              error instanceof Error
-                                ? error.message
-                                : "Review failed",
+                              moderationErrorMessage(
+                                error,
+                                "Could not mark the report reviewed. Please try again.",
+                              ),
                             );
                           }
                         }}
@@ -203,6 +213,9 @@ export function AcarsModerationTab() {
                     <ModerationControls
                       userId={item.pilotId}
                       label={item.pilotLabel}
+                      disabledReason={
+                        item.moderationDisabledReason ?? undefined
+                      }
                     />
                   </div>
                 )}
@@ -256,6 +269,9 @@ export function AcarsModerationTab() {
                     <ModerationControls
                       userId={item.userId}
                       label={item.pilotLabel}
+                      disabledReason={
+                        item.moderationDisabledReason ?? undefined
+                      }
                     />
                   </div>
                 )}

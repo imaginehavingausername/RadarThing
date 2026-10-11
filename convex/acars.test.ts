@@ -616,6 +616,51 @@ test("legacy unlinked ACARS review does not identify pilots by GeoFS ID", async 
   assert.equal(blocked.page[0].userId, null);
 });
 
+test("ACARS review identifies accounts an admin cannot moderate", async () => {
+  const f = fixture();
+  f.tables.acarsMessages.push({
+    _id: "admin-message",
+    userId: "admin",
+    googleId,
+    body: "Admin entry",
+    createdAt: Date.now(),
+  });
+  f.tables.acarsReports.push({
+    _id: "admin-report",
+    messageId: "admin-message",
+    reporterUserId: "viewer",
+    pilotUserId: "admin",
+    googleId,
+    body: "Admin entry",
+    reason: "Review this",
+    createdAt: Date.now(),
+  });
+  f.tables.acarsModerationEvents.push({
+    _id: "admin-block",
+    userId: "admin",
+    googleId,
+    body: "Blocked admin entry",
+    categories: ["harassment"],
+    createdAt: Date.now(),
+  });
+  f.as("admin");
+  const paginationOpts = { numItems: 25, cursor: null };
+  const reports = await call<any>(adminReports, f.ctx, { paginationOpts });
+  const blocked = await call<any>(adminBlocked, f.ctx, { paginationOpts });
+  assert.equal(
+    reports.page[0].moderationDisabledReason,
+    "You cannot moderate your own account",
+  );
+  assert.equal(
+    blocked.page[0].moderationDisabledReason,
+    "You cannot moderate your own account",
+  );
+  await assert.rejects(
+    call(adminRemove, f.ctx, { messageId: "admin-message" }),
+    /You cannot moderate your own account/,
+  );
+});
+
 test("posting reservation stops a second moderation attempt", async () => {
   const f = fixture();
   await call(registerDevice, f.ctx, { googleId, tokenHash, systemSecret });

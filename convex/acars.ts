@@ -101,6 +101,26 @@ async function moderationPilot(
   );
 }
 
+function moderationDisabledReason(
+  actor: { _id: Id<"users">; googleId?: string },
+  pilot: {
+    _id: Id<"users">;
+    googleId?: string;
+    role: string;
+    isDeleted: boolean;
+  } | null,
+) {
+  if (!pilot) return null;
+  try {
+    assertModerationTarget(actor, pilot);
+    return null;
+  } catch (error) {
+    return error instanceof Error
+      ? error.message
+      : "Account cannot be moderated";
+  }
+}
+
 async function lastPostingAttempt(
   ctx: QueryCtx | MutationCtx,
   googleId: string,
@@ -574,7 +594,7 @@ export const report = mutation({
 export const adminReports = query({
   args: { paginationOpts: paginationOptsValidator },
   handler: async (ctx, args) => {
-    await requireAdmin(ctx);
+    const actor = await requireAdmin(ctx);
     const page = await ctx.db
       .query("acarsReports")
       .withIndex("by_createdAt")
@@ -599,6 +619,7 @@ export const adminReports = query({
             reviewedAt: report.reviewedAt,
             isMessagePresent: Boolean(message),
             pilotId: pilot?._id ?? null,
+            moderationDisabledReason: moderationDisabledReason(actor, pilot),
             pilotLabel: pilot
               ? moderationLabel(pilot, pilot._id)
               : "Unlinked pilot",
@@ -612,7 +633,7 @@ export const adminReports = query({
 export const adminBlocked = query({
   args: { paginationOpts: paginationOptsValidator },
   handler: async (ctx, args) => {
-    await requireAdmin(ctx);
+    const actor = await requireAdmin(ctx);
     const page = await ctx.db
       .query("acarsModerationEvents")
       .withIndex("by_createdAt")
@@ -633,6 +654,7 @@ export const adminBlocked = query({
             categories: event.categories,
             createdAt: event.createdAt,
             userId: pilot?._id ?? null,
+            moderationDisabledReason: moderationDisabledReason(actor, pilot),
             pilotLabel: pilot
               ? moderationLabel(pilot, pilot._id)
               : "Unlinked pilot",

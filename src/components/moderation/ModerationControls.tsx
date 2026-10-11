@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { useProStatus } from "~/hooks/useProStatus";
+import { moderationErrorMessage } from "~/lib/moderation-error";
 
 export const moderationButton =
   "cursor-pointer rounded-md border border-white/15 px-3 py-2 text-sm transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40";
@@ -103,7 +104,10 @@ function ModerationDialog({
       onClose();
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Moderation action failed",
+        moderationErrorMessage(
+          error,
+          "Could not apply the moderation action. Please try again.",
+        ),
       );
     } finally {
       setBusy(false);

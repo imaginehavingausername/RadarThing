@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useUser } from "@clerk/nextjs";
 import { useQuery } from "convex/react";
 import {
@@ -16,6 +17,7 @@ import {
   Upload,
 } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
+import type { FunctionReturnType } from "convex/server";
 import { Analytics } from "~/lib/analytics";
 import {
   Select,
@@ -70,12 +72,15 @@ function hasStartedChallengeEntry(entry: {
 
 export default function LeaderboardClient({
   initialSort,
+  initialLeaderboard,
 }: {
   initialSort: SortKey;
+  initialLeaderboard: FunctionReturnType<typeof api.flights.getLeaderboard>;
 }) {
   const router = useRouter();
   const { user, isLoaded } = useUser();
-  const leaderboard = useQuery(api.flights.getLeaderboard);
+  const liveLeaderboard = useQuery(api.flights.getLeaderboard);
+  const leaderboard = liveLeaderboard ?? initialLeaderboard;
   const challengeLeaderboard = useQuery(
     api.challenges.listActiveLeaderboard,
     {},
@@ -739,6 +744,26 @@ export default function LeaderboardClient({
             )}
           </>
         )}
+        <section className="mt-12 border-t border-white/10 pt-8 text-sm leading-7 text-slate-400">
+          <h2 className="mb-2 text-lg font-semibold text-white">
+            Reading the rankings
+          </h2>
+          <p className="max-w-3xl">
+            These totals come from flights recorded by participating GeoFS
+            pilots. Switch tabs to compare completed flights, distance, flight
+            time, current streaks and approved aircraft image contributions.
+            Select a pilot to inspect their public flight statistics and recent
+            routes. Tracker gaps and excluded flights can affect totals; the
+            rankings are a community view of simulator activity, not a measure
+            of real-world flying experience.
+          </p>
+          <Link
+            href="/guides/flight-history-and-replay"
+            className="mt-3 inline-block text-cyan-300 hover:underline"
+          >
+            How flight history works ↗
+          </Link>
+        </section>
       </main>
     </div>
   );

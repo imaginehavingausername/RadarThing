@@ -1,5 +1,14 @@
 import LeaderboardClient from "./LeaderboardClient";
+import { api, convex } from "~/server/convex";
 
-export default function LeaderboardPage() {
-  return <LeaderboardClient initialSort="flights" />;
+export const revalidate = 60;
+
+export default async function LeaderboardPage() {
+  const initialLeaderboard = await convex.query(api.flights.getLeaderboard, {});
+  return (
+    <LeaderboardClient
+      initialSort="flights"
+      initialLeaderboard={initialLeaderboard}
+    />
+  );
 }

@@ -243,6 +243,7 @@ export function AirportChartsTab({
   const [searchQuery, setSearchQuery] = useState("");
   const [icaoFilter, setIcaoFilter] = useState<string>("");
   const [typeFilter, setTypeFilter] = useState<ChartType | "">("");
+  const [uploaderFilter, setUploaderFilter] = useState("");
   const [pageSize, setPageSize] =
     useState<(typeof PAGE_SIZE_OPTIONS)[number]>(10);
   const [currentPage, setCurrentPage] = useState(1);
@@ -264,10 +265,31 @@ export function AirportChartsTab({
       if (!chart.icao) return;
       if (!matchesChartSearch(chart, searchQuery, userInfo)) return;
       if (typeFilter && chart.chartType !== typeFilter) return;
+      if (uploaderFilter && chart.uploadedBy !== uploaderFilter) return;
       icaos.add(chart.icao);
     });
     return Array.from(icaos).sort();
-  }, [approvedCharts, searchQuery, typeFilter, userInfo]);
+  }, [approvedCharts, searchQuery, typeFilter, uploaderFilter, userInfo]);
+
+  const uniqueUploaders = useMemo(() => {
+    const uploaders = new globalThis.Map<string, string>();
+    approvedCharts.forEach((chart) => {
+      if (!chart.uploadedBy) return;
+      if (!matchesChartSearch(chart, searchQuery, userInfo)) return;
+      if (icaoFilter && chart.icao !== icaoFilter) return;
+      if (typeFilter && chart.chartType !== typeFilter) return;
+
+      const info = userInfo[chart.uploadedBy];
+      const label =
+        info?.email && info.email !== "Unknown"
+          ? info.email
+          : info?.name || chart.uploadedBy;
+      uploaders.set(chart.uploadedBy, label);
+    });
+    return Array.from(uploaders, ([id, label]) => ({ id, label })).sort(
+      (a, b) => a.label.localeCompare(b.label),
+    );
+  }, [approvedCharts, searchQuery, icaoFilter, typeFilter, userInfo]);
 
   useEffect(() => {
     if (icaoFilter && !uniqueIcaos.includes(icaoFilter)) {
@@ -275,13 +297,24 @@ export function AirportChartsTab({
     }
   }, [uniqueIcaos, icaoFilter]);
 
-  const hasActiveFilters = searchQuery || icaoFilter || typeFilter;
+  useEffect(() => {
+    if (
+      uploaderFilter &&
+      !uniqueUploaders.some((uploader) => uploader.id === uploaderFilter)
+    ) {
+      setUploaderFilter("");
+    }
+  }, [uniqueUploaders, uploaderFilter]);
+
+  const hasActiveFilters =
+    searchQuery || icaoFilter || typeFilter || uploaderFilter;
 
   const filteredCharts = useMemo(() => {
     return approvedCharts
       .filter((chart) => {
         if (icaoFilter && chart.icao !== icaoFilter) return false;
         if (typeFilter && chart.chartType !== typeFilter) return false;
+        if (uploaderFilter && chart.uploadedBy !== uploaderFilter) return false;
         if (!matchesChartSearch(chart, searchQuery, userInfo)) return false;
         return true;
       })
@@ -294,7 +327,14 @@ export function AirportChartsTab({
         if (typeCompare !== 0) return typeCompare;
         return (a.chartName || "").localeCompare(b.chartName || "");
       });
-  }, [approvedCharts, searchQuery, icaoFilter, typeFilter, userInfo]);
+  }, [
+    approvedCharts,
+    searchQuery,
+    icaoFilter,
+    typeFilter,
+    uploaderFilter,
+    userInfo,
+  ]);
   const totalPages = Math.max(1, Math.ceil(filteredCharts.length / pageSize));
   const paginatedCharts = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
@@ -309,7 +349,7 @@ export function AirportChartsTab({
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, icaoFilter, typeFilter, pageSize]);
+  }, [searchQuery, icaoFilter, typeFilter, uploaderFilter, pageSize]);
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -321,6 +361,7 @@ export function AirportChartsTab({
     setSearchQuery("");
     setIcaoFilter("");
     setTypeFilter("");
+    setUploaderFilter("");
   };
 
   // Fetch user info
@@ -462,7 +503,7 @@ export function AirportChartsTab({
             className="w-full rounded-lg border border-white/10 bg-black/40 py-2.5 pr-4 pl-10 text-sm text-white placeholder-slate-500 transition-all outline-none focus:border-cyan-500/50"
           />
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <Select
             value={icaoFilter || "__all_airports__"}
             onValueChange={(value) =>
@@ -473,7 +514,10 @@ export function AirportChartsTab({
               <SelectValue placeholder="All Airports" />
             </SelectTrigger>
             <SelectContent className="border-white/10 bg-[#0b1118] text-white">
-              <SelectItem value="__all_airports__" className="font-mono text-sm text-white focus:bg-cyan-500/10 focus:text-cyan-200">
+              <SelectItem
+                value="__all_airports__"
+                className="font-mono text-sm text-white focus:bg-cyan-500/10 focus:text-cyan-200"
+              >
                 All Airports
               </SelectItem>
               {uniqueIcaos.map((icao) => (
@@ -490,14 +534,19 @@ export function AirportChartsTab({
           <Select
             value={typeFilter || "__all_types__"}
             onValueChange={(value) =>
-              setTypeFilter(value === "__all_types__" ? "" : (value as ChartType))
+              setTypeFilter(
+                value === "__all_types__" ? "" : (value as ChartType),
+              )
             }
           >
             <SelectTrigger className="h-11 w-full min-w-0 rounded-lg border-white/10 bg-black/40 font-mono text-sm text-white shadow-none hover:bg-white/[0.06] focus-visible:border-cyan-500/50 focus-visible:ring-cyan-500/20">
               <SelectValue placeholder="All Types" />
             </SelectTrigger>
             <SelectContent className="border-white/10 bg-[#0b1118] text-white">
-              <SelectItem value="__all_types__" className="font-mono text-sm text-white focus:bg-cyan-500/10 focus:text-cyan-200">
+              <SelectItem
+                value="__all_types__"
+                className="font-mono text-sm text-white focus:bg-cyan-500/10 focus:text-cyan-200"
+              >
                 All Types
               </SelectItem>
               {CHART_TYPES.map((type) => (
@@ -507,6 +556,33 @@ export function AirportChartsTab({
                   className="font-mono text-sm text-white focus:bg-cyan-500/10 focus:text-cyan-200"
                 >
                   {type.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={uploaderFilter || "__all_uploaders__"}
+            onValueChange={(value) =>
+              setUploaderFilter(value === "__all_uploaders__" ? "" : value)
+            }
+          >
+            <SelectTrigger className="h-11 w-full min-w-0 rounded-lg border-white/10 bg-black/40 font-mono text-sm text-white shadow-none hover:bg-white/[0.06] focus-visible:border-cyan-500/50 focus-visible:ring-cyan-500/20">
+              <SelectValue placeholder="All Uploaders" />
+            </SelectTrigger>
+            <SelectContent className="border-white/10 bg-[#0b1118] text-white">
+              <SelectItem
+                value="__all_uploaders__"
+                className="font-mono text-sm text-white focus:bg-cyan-500/10 focus:text-cyan-200"
+              >
+                All Uploaders
+              </SelectItem>
+              {uniqueUploaders.map((uploader) => (
+                <SelectItem
+                  key={uploader.id}
+                  value={uploader.id}
+                  className="font-mono text-sm text-white focus:bg-cyan-500/10 focus:text-cyan-200"
+                >
+                  {uploader.label}
                 </SelectItem>
               ))}
             </SelectContent>

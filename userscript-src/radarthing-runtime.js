@@ -292,18 +292,18 @@
   function loadRadarPrefs() {
     try {
       const raw = localStorage.getItem(RADAR_PREFS_KEY);
-      if (!raw) return { seabus: true };
+      if (!raw) return { seabus: false };
 
       const parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== "object") {
-        return { seabus: true };
+        return { seabus: false };
       }
 
       return {
-        seabus: parsed.seabus !== false,
+        seabus: parsed.seabus === true,
       };
     } catch (_) {
-      return { seabus: true };
+      return { seabus: false };
     }
   }
 

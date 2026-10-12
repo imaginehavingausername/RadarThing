@@ -565,7 +565,7 @@
   );
 
   setInterval(() => {
-    if (window.__radarPrefs?.seabus === false) return;
+    if (window.__radarPrefs?.seabus !== true) return;
     if (!flightInfo.active) return;
 
     const snap = readSnapshot();

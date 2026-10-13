@@ -622,10 +622,8 @@ export const Sidebar = ({
       ref={containerRef}
       className="flex h-full min-h-0 flex-col bg-[#050f14]/90 text-white"
     >
-      {/* Scrollable content wrapper for mobile */}
-      <div
-        className={`${isMobile ? "min-h-0 flex-1 overflow-y-auto overscroll-contain" : "flex min-h-0 flex-1 flex-col overflow-hidden"}`}
-      >
+      {/* Keep all aircraft details reachable when the sidebar exceeds the viewport. */}
+      <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain">
         {/* Header with optional aircraft photo background */}
         <div
           className={`relative ${hasCommunityImage || isAircraftImagePending ? (isMobile ? "min-h-[140px]" : "min-h-[200px]") : ""}`}
@@ -970,7 +968,7 @@ export const Sidebar = ({
               </div>
             </nav>
 
-            <div className="custom-scrollbar flex-1 overflow-y-auto px-6 pb-12">
+            <div className="px-6 pb-12">
               {tab === "info" ? (
                 <div className="space-y-6">
                   {diversionStatus.isDiverting && (

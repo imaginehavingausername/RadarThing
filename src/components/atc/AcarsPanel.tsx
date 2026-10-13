@@ -69,7 +69,12 @@ export function AcarsPanel({ googleId }: { googleId?: string }) {
         </h2>
         <span className="font-mono text-[9px] text-white/35">Latest first</span>
       </div>
-      <div className="max-h-64 space-y-2 overflow-y-auto">
+      <div
+        tabIndex={0}
+        role="region"
+        aria-label="ACARS messages"
+        className="custom-scrollbar max-h-64 space-y-2 overflow-y-auto overscroll-contain"
+      >
         {entries.map((entry) => (
           <article
             key={entry._id}

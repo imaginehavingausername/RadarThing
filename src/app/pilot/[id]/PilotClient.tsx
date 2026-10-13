@@ -226,11 +226,11 @@ export default function PilotClient({
           </div>
         </div>
 
-        <section className="mb-8 max-w-3xl border-l-2 border-cyan-400/40 pl-4 text-sm leading-7 text-slate-400 sm:mb-10">
-          <h2 className="mb-1 font-semibold text-slate-200">
+        <details className="mb-6 max-w-3xl text-sm leading-7 text-slate-400">
+          <summary className="cursor-pointer text-slate-300 hover:text-white">
             About this pilot record
-          </h2>
-          <p>
+          </summary>
+          <p className="mt-3">
             These totals come from GeoFS flights recorded through the RadarThing
             tracker. Open a recent flight to inspect its route and replay the
             positions saved during that session. A connection gap can leave part
@@ -238,7 +238,7 @@ export default function PilotClient({
             statistics. This is a community simulator profile, not a real-world
             aviation record.
           </p>
-        </section>
+        </details>
 
         <PilotChallengesPanel userId={userId} />
 

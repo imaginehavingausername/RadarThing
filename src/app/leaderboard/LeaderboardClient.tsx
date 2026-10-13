@@ -744,11 +744,11 @@ export default function LeaderboardClient({
             )}
           </>
         )}
-        <section className="mt-12 border-t border-white/10 pt-8 text-sm leading-7 text-slate-400">
-          <h2 className="mb-2 text-lg font-semibold text-white">
+        <details className="mt-8 border-t border-white/10 pt-4 text-sm leading-7 text-slate-400">
+          <summary className="cursor-pointer text-slate-300 hover:text-white">
             Reading the rankings
-          </h2>
-          <p className="max-w-3xl">
+          </summary>
+          <p className="mt-3 max-w-3xl">
             These totals come from flights recorded by participating GeoFS
             pilots. Switch tabs to compare completed flights, distance, flight
             time, current streaks and approved aircraft image contributions.
@@ -763,7 +763,7 @@ export default function LeaderboardClient({
           >
             How flight history works ↗
           </Link>
-        </section>
+        </details>
       </main>
     </div>
   );

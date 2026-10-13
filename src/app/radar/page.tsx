@@ -1192,7 +1192,8 @@ function ATCPageContent() {
           label: "Guides",
           icon: <FileText size={18} strokeWidth={1.8} />,
           active: false,
-          onClick: () => window.open("/guides", "_blank", "noopener,noreferrer"),
+          onClick: () =>
+            window.open("/guides", "_blank", "noopener,noreferrer"),
         },
         {
           id: "radar-guide",
@@ -1200,6 +1201,18 @@ function ATCPageContent() {
           icon: <Radar size={18} strokeWidth={1.8} />,
           active: isRadarGuideOpen,
           onClick: () => setIsRadarGuideOpen(true),
+        },
+        {
+          id: "about-radar",
+          label: "About Radar",
+          icon: <CircleHelp size={18} strokeWidth={1.8} />,
+          active: false,
+          onClick: () => {
+            const dialog = document.getElementById(
+              "radar-about",
+            ) as HTMLDialogElement | null;
+            if (dialog && !dialog.open) dialog.showModal();
+          },
         },
         {
           id: "stats-rules",
@@ -1811,11 +1824,7 @@ function ATCPageContent() {
 
       {/* Control dock - compact on mobile, hidden when chart side panel is open */}
       {!isUiHidden && !(chartOverlayActive && chartOverlayIcao) && (
-        <ControlDock
-          side="right"
-          isMobile={isMobile}
-          sections={dockSections}
-        />
+        <ControlDock side="right" isMobile={isMobile} sections={dockSections} />
       )}
 
       {!isUiHidden && selectedAirport && (

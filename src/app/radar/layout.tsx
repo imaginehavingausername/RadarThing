@@ -15,17 +15,27 @@ export default function RadarLayout({ children }: { children: ReactNode }) {
       <Suspense fallback={<div className="h-screen w-screen bg-[#081722]" />}>
         {children}
       </Suspense>
-      <details className="group fixed top-24 left-4 z-[10029] w-[min(22rem,calc(100vw-2rem))] overflow-hidden border border-cyan-300/30 bg-[#071923]/95 text-slate-100 shadow-2xl backdrop-blur-xl open:max-h-[min(72vh,36rem)] open:overflow-y-auto">
-        <summary className="cursor-pointer list-none px-4 py-3 font-mono text-xs tracking-widest text-cyan-200 uppercase marker:hidden hover:bg-cyan-300/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300">
-          <span className="flex items-center justify-between gap-3">
+      <dialog
+        id="radar-about"
+        aria-labelledby="radar-about-title"
+        className="fixed inset-0 m-auto max-h-[calc(100dvh-2rem)] w-[min(30rem,calc(100vw-2rem))] overflow-y-auto border border-cyan-300/30 bg-[#071923] p-0 text-slate-100 shadow-2xl backdrop:bg-black/60"
+      >
+        <form
+          method="dialog"
+          className="flex items-center justify-between gap-4 px-4 py-3"
+        >
+          <span className="font-mono text-xs tracking-widest text-cyan-200 uppercase">
             About this radar
-            <span aria-hidden="true" className="text-lg leading-none">
-              +
-            </span>
           </span>
-        </summary>
+          <button className="cursor-pointer px-2 py-1 text-sm text-slate-300 hover:text-white focus-visible:outline-2 focus-visible:outline-cyan-300">
+            Close
+          </button>
+        </form>
         <div className="border-t border-cyan-300/20 px-4 pt-4 pb-5 text-sm leading-6 text-slate-300">
-          <h1 className="mb-3 text-xl font-semibold text-white">
+          <h1
+            id="radar-about-title"
+            className="mb-3 text-xl font-semibold text-white"
+          >
             Explore GeoFS traffic together
           </h1>
           <p>
@@ -62,7 +72,7 @@ export default function RadarLayout({ children }: { children: ReactNode }) {
             </Link>
           </div>
         </div>
-      </details>
+      </dialog>
     </>
   );
 }

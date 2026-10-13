@@ -679,34 +679,42 @@ export default function AircraftImagesClient({
             )}
           </>
         )}
-        <section className="mt-14 grid gap-8 border-t border-white/10 pt-8 text-sm leading-7 text-slate-400 md:grid-cols-2">
-          <div>
-            <h2 className="mb-2 text-lg font-semibold text-white">
-              How images reach the radar
-            </h2>
-            <p>
-              Contributors submit an image for a specific airline and aircraft
-              type. A moderator reviews each submission before it appears in
-              this gallery and alongside matching aircraft in RadarThing. Use
-              the filters above to check whether an image is already available
-              for a combination.
-            </p>
+        <details className="group mt-8 border-t border-white/10 pt-4 text-sm leading-7 text-slate-400">
+          <summary className="cursor-pointer text-slate-300 hover:text-white">
+            About the gallery and contributions
+          </summary>
+          <div className="grid gap-8 pt-6 md:grid-cols-2">
+            <div>
+              <h2 className="mb-2 text-lg font-semibold text-white">
+                How images reach the radar
+              </h2>
+              <p>
+                Contributors submit an image for a specific airline and aircraft
+                type. A moderator reviews each submission before it appears in
+                this gallery and alongside matching aircraft in RadarThing. Use
+                the filters above to check whether an image is already available
+                for a combination.
+              </p>
+            </div>
+            <div>
+              <h2 className="mb-2 text-lg font-semibold text-white">
+                Contribute an image
+              </h2>
+              <p>
+                Upload an image you have the right to share and enter the
+                matching aircraft details. If you see a rights issue with an
+                existing image, use our{" "}
+                <Link
+                  href="/copyright"
+                  className="text-cyan-300 hover:underline"
+                >
+                  copyright contact
+                </Link>{" "}
+                so we can review it.
+              </p>
+            </div>
           </div>
-          <div>
-            <h2 className="mb-2 text-lg font-semibold text-white">
-              Contribute an image
-            </h2>
-            <p>
-              Upload an image you have the right to share and enter the matching
-              aircraft details. If you see a rights issue with an existing
-              image, use our{" "}
-              <Link href="/copyright" className="text-cyan-300 hover:underline">
-                copyright contact
-              </Link>{" "}
-              so we can review it.
-            </p>
-          </div>
-        </section>
+        </details>
       </main>
 
       {/* Upload Modal */}

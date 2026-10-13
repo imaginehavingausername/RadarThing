@@ -16,6 +16,7 @@ import {
   type RadarTrailPreferences,
 } from "~/lib/radarTrailPreferences";
 import {
+  preloadAircraftIcons,
   getAircraftDivIcon,
   getRadarAircraftDivIcon,
   AirportIcon,
@@ -535,6 +536,21 @@ export const useMapLayersAndMarkers = ({
   const conflictLayerRef = useRef<L.LayerGroup | null>(null);
   const radarTrailRendererRef = useRef<L.Renderer | null>(null);
   const hasReportedInitialTrafficPaintRef = useRef(false);
+  const [areAircraftIconsReady, setAreAircraftIconsReady] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void preloadAircraftIcons()
+      .then(() => {
+        if (!cancelled) setAreAircraftIconsReady(true);
+      })
+      .catch(() => {
+        // A failed asset is covered by the page's boot timeout.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Use refs for callbacks to avoid stale closures in event handlers
   const onAircraftSelectRef = useRef(onAircraftSelect);
@@ -914,7 +930,7 @@ export const useMapLayersAndMarkers = ({
     // component (page.tsx) which properly redraws all selected aircraft paths
     // when aircraft data updates. Redrawing here would cause flickering in
     // multi-select mode since it would only redraw one aircraft's path.
-    if (!hasReportedInitialTrafficPaintRef.current) {
+    if (areAircraftIconsReady && !hasReportedInitialTrafficPaintRef.current) {
       animationFrameId = requestAnimationFrame(() => {
         hasReportedInitialTrafficPaintRef.current = true;
         onInitialTrafficPaint?.();
@@ -936,6 +952,7 @@ export const useMapLayersAndMarkers = ({
     mapReady,
     isMobile,
     onInitialTrafficPaint,
+    areAircraftIconsReady,
     speedUnit,
     altitudeUnit,
   ]);

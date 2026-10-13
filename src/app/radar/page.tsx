@@ -36,6 +36,7 @@ import { useRecentSearches } from "~/hooks/useRecentSearches";
 import { useActiveTracker } from "~/hooks/useActiveTracker";
 import { useMostTrackedFlights } from "~/hooks/useMostTrackedFlights";
 import { useTileCacheWorker } from "~/hooks/useTileCacheWorker";
+import { preloadImages } from "~/lib/preloadImages";
 import { Analytics } from "~/lib/analytics";
 import { isFreeChartIcao } from "~/lib/chartAccess";
 import {
@@ -113,7 +114,8 @@ const DynamicMapComponent = dynamic(() => import("~/components/map"), {
   loading: () => <MapSkeleton />,
 });
 
-const APP_BOOT_TIMEOUT_MS = 8000;
+// Allow the initial weather tile requests to finish on slower connections.
+const APP_BOOT_TIMEOUT_MS = 15000;
 const DESKTOP_MAP_RENDERER_COOKIE = "desktop_map_renderer";
 
 type RightPanel = "fids" | "filter" | "airports" | null;
@@ -339,6 +341,8 @@ function ATCPageContent() {
     useState(false);
   const [hasInitialTrafficPainted, setHasInitialTrafficPainted] =
     useState(false);
+  const [isWeatherReady, setIsWeatherReady] = useState(false);
+  const [areLogosReady, setAreLogosReady] = useState(false);
   const [hasBootTimedOut, setHasBootTimedOut] = useState(false);
   const [isAppReady, setIsAppReady] = useState(false);
   const [showMobileSearch, setShowMobileSearch] = useState(false);
@@ -633,6 +637,20 @@ function ATCPageContent() {
     setSelectedCallsigns(new Set());
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    void preloadImages(["/logo-white.svg", "/logo-black.svg"])
+      .then(() => {
+        if (!cancelled) setAreLogosReady(true);
+      })
+      .catch(() => {
+        // A failed logo is covered by the boot timeout.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const handleMapReady = useCallback(() => {
     setIsMapLoaded(true);
   }, []);
@@ -660,7 +678,9 @@ function ATCPageContent() {
       !isLoading &&
       isMapLoaded &&
       hasInitialBaseLayerLoaded &&
-      hasInitialTrafficPainted;
+      hasInitialTrafficPainted &&
+      isWeatherReady &&
+      areLogosReady;
 
     if (!hasCompletedInitialBoot && !hasBootTimedOut) return;
 
@@ -670,6 +690,8 @@ function ATCPageContent() {
 
     return () => window.cancelAnimationFrame(frameId);
   }, [
+    areLogosReady,
+    isWeatherReady,
     hasBootTimedOut,
     hasInitialBaseLayerLoaded,
     hasInitialTrafficPainted,
@@ -1293,14 +1315,11 @@ function ATCPageContent() {
         <div className="flex items-center gap-2">
           {!isPhone && !isUiHidden && (
             <Image
-              src={
-                isDarkLayerMode || isLoading
-                  ? "/logo-white.svg"
-                  : "/logo-black.svg"
-              }
+              src={isDarkLayerMode ? "/logo-white.svg" : "/logo-black.svg"}
               alt="RadarThing"
               width={isPhone ? 100 : isTablet ? 100 : 130}
               height={isPhone ? 32 : isTablet ? 32 : 40}
+              priority
               className="cursor-pointer"
               onClick={() => router.push("/radar")}
             />
@@ -1712,6 +1731,7 @@ function ATCPageContent() {
           onMapReady={handleMapReady}
           onInitialBaseLayerReady={handleInitialBaseLayerReady}
           onInitialTrafficPaint={handleInitialTrafficPaint}
+          onWeatherReadyChange={setIsWeatherReady}
           historyPath={historyPath}
           onLayerModeChange={setIsDarkLayerMode}
           replayState={replayState}

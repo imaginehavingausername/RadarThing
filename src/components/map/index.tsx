@@ -180,6 +180,7 @@ interface MapComponentProps {
   onMapReady?: () => void;
   onInitialBaseLayerReady?: () => void;
   onInitialTrafficPaint?: () => void;
+  onWeatherReadyChange?: (ready: boolean) => void;
   historyPath?: FlightRoutePoint[] | null;
   onLayerModeChange?: (isDarkLayer: boolean) => void;
   replayState?: ReplayState | null;
@@ -226,6 +227,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
   onMapReady,
   onInitialBaseLayerReady,
   onInitialTrafficPaint,
+  onWeatherReadyChange,
   historyPath,
   onLayerModeChange,
   replayState,
@@ -959,12 +961,17 @@ const MapComponent: React.FC<MapComponentProps> = ({
     isRadarMode,
   });
 
-  useWeatherOverlayLayer({
+  const isWeatherReady = useWeatherOverlayLayer({
     mapInstance: mapRefs.mapInstance,
+    mapReady: mapRefs.mapReady,
     showPrecipitation,
     showAirmets: canUseAdvancedWeather && showAirmets,
     showSigmets: canUseAdvancedWeather && showSigmets,
   });
+
+  useEffect(() => {
+    onWeatherReadyChange?.(!proLoading && isWeatherReady);
+  }, [isWeatherReady, proLoading, onWeatherReadyChange]);
 
   useWaypointOverlayLayer({
     mapInstance: mapRefs.mapInstance,

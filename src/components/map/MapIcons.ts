@@ -1,4 +1,5 @@
 import L from "leaflet";
+import { preloadImages } from "~/lib/preloadImages";
 import { type PositionUpdate } from "~/lib/aircraft-store";
 import {
   formatSpeed,
@@ -49,6 +50,14 @@ const ADSB_RADAR_ICON_URLS = {
   learjet: `${ADSB_RADAR_ICON_BASE}/learjet.svg`,
   md11: `${ADSB_RADAR_ICON_BASE}/md11.svg`,
 } as const;
+let aircraftIconsReady: Promise<void> | undefined;
+
+export function preloadAircraftIcons(): Promise<void> {
+  return (aircraftIconsReady ??= preloadImages(
+    Object.values(ADSB_RADAR_ICON_URLS),
+  ));
+}
+
 const DEFAULT_AIRCRAFT_ICON = ADSB_RADAR_ICON_URLS.e195;
 const AIRCRAFT_ICONS = {
   helicopter: ADSB_RADAR_ICON_URLS.a7,

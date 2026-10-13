@@ -1,8 +1,9 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 
 interface UseWeatherOverlayLayerProps {
   mapInstance: React.MutableRefObject<L.Map | null>;
+  mapReady: boolean;
   showPrecipitation: boolean;
   showAirmets: boolean;
   showSigmets: boolean;
@@ -10,6 +11,7 @@ interface UseWeatherOverlayLayerProps {
 
 export const useWeatherOverlayLayer = ({
   mapInstance,
+  mapReady,
   showPrecipitation,
   showAirmets,
   showSigmets,
@@ -19,13 +21,20 @@ export const useWeatherOverlayLayer = ({
   const sigmetLayerRef = useRef<L.GeoJSON | null>(null);
   const isigmetLayerRef = useRef<L.GeoJSON | null>(null);
 
+  const [precipitationReady, setPrecipitationReady] = useState(false);
+  const [hazardsReadyFor, setHazardsReadyFor] = useState<string | null>(null);
+  const hazardKey = `${showAirmets}:${showSigmets}`;
+
   /* -------------------------------
    * Precipitation (Raster)
    * ------------------------------- */
   useEffect(() => {
-    if (!mapInstance.current) return;
+    if (!mapReady || !mapInstance.current) return;
     const map = mapInstance.current;
 
+    setPrecipitationReady(false);
+    let precipitationLayer: L.TileLayer | null = null;
+    const markReady = () => setPrecipitationReady(true);
     if (showPrecipitation) {
       if (!precipLayerRef.current) {
         precipLayerRef.current = L.tileLayer(
@@ -38,18 +47,24 @@ export const useWeatherOverlayLayer = ({
           },
         );
       }
-      precipLayerRef.current.addTo(map);
+      precipitationLayer = precipLayerRef.current;
+      precipitationLayer.on("load", markReady);
+      precipitationLayer.addTo(map);
+      if (!precipitationLayer.isLoading()) markReady();
     } else if (precipLayerRef.current) {
       map.removeLayer(precipLayerRef.current);
       precipLayerRef.current = null;
     }
-  }, [mapInstance, showPrecipitation]);
+    return () => {
+      precipitationLayer?.off("load", markReady);
+    };
+  }, [mapInstance, mapReady, showPrecipitation]);
 
   /* -------------------------------
    * AIRMET / SIGMET / ISIGMET
    * ------------------------------- */
   useEffect(() => {
-    if (!mapInstance.current) return;
+    if (!mapReady || !mapInstance.current) return;
     const map = mapInstance.current;
 
     const styleForHazard = (hazard?: string): L.PathOptions => {
@@ -107,6 +122,8 @@ export const useWeatherOverlayLayer = ({
     };
 
     let isCancelled = false;
+    setHazardsReadyFor(null);
+    const requests: Promise<void>[] = [];
 
     const loadLayer = async (
       url: string,
@@ -116,6 +133,7 @@ export const useWeatherOverlayLayer = ({
       const res = await fetch(url);
       if (isCancelled) return;
 
+      if (!res.ok) throw new Error(`Weather request failed: ${res.status}`);
       const geojson = await res.json();
       if (isCancelled) return;
 
@@ -134,7 +152,7 @@ export const useWeatherOverlayLayer = ({
     };
 
     if (showAirmets && !airmetLayerRef.current) {
-      loadLayer("/api/weather/airmets", airmetLayerRef, 400);
+      requests.push(loadLayer("/api/weather/airmets", airmetLayerRef, 400));
     }
     if (!showAirmets && airmetLayerRef.current) {
       map.removeLayer(airmetLayerRef.current);
@@ -142,7 +160,7 @@ export const useWeatherOverlayLayer = ({
     }
 
     if (showSigmets && !sigmetLayerRef.current) {
-      loadLayer("/api/weather/sigmets", sigmetLayerRef, 600);
+      requests.push(loadLayer("/api/weather/sigmets", sigmetLayerRef, 600));
     }
     if (!showSigmets && sigmetLayerRef.current) {
       map.removeLayer(sigmetLayerRef.current);
@@ -150,12 +168,20 @@ export const useWeatherOverlayLayer = ({
     }
 
     if (showSigmets && !isigmetLayerRef.current) {
-      loadLayer("/api/weather/isigmets", isigmetLayerRef, 650);
+      requests.push(loadLayer("/api/weather/isigmets", isigmetLayerRef, 650));
     }
     if (!showSigmets && isigmetLayerRef.current) {
       map.removeLayer(isigmetLayerRef.current);
       isigmetLayerRef.current = null;
     }
+
+    void Promise.all(requests)
+      .then(() => {
+        if (!isCancelled) setHazardsReadyFor(hazardKey);
+      })
+      .catch(() => {
+        // Keep the overlay up until the page's boot timeout on failure.
+      });
 
     return () => {
       isCancelled = true;
@@ -166,5 +192,11 @@ export const useWeatherOverlayLayer = ({
         }
       });
     };
-  }, [mapInstance, showAirmets, showSigmets]);
+  }, [mapInstance, mapReady, showAirmets, showSigmets, hazardKey]);
+
+  return (
+    mapReady &&
+    (!showPrecipitation || precipitationReady) &&
+    hazardsReadyFor === hazardKey
+  );
 };

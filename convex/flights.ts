@@ -25,6 +25,7 @@ import {
   requireAdmin,
   requireAuthenticatedClerkId,
 } from "./lib/auth";
+import { recordFlightTelemetry } from "./lib/telemetry";
 
 const DEFAULT_STATS_MAX_SPEED_KTS = 750;
 const HIGH_PERFORMANCE_STATS_MAX_SPEED_KTS = 1333;
@@ -141,7 +142,7 @@ function deriveVisibleCurrentStreak(
   return streakAtLastFlight;
 }
 
-function getStatsExcludedReason(flight: {
+export function getStatsExcludedReason(flight: {
   aircraftType?: string;
   maxSpeed?: number;
   statsExcludedReason?: string;
@@ -170,7 +171,7 @@ function isFlightStatsEligible(flight: {
   return getStatsExcludedReason(flight) === undefined;
 }
 
-function getRecordedFlightDurationMs(flight: {
+export function getRecordedFlightDurationMs(flight: {
   duration?: number;
   startTime: number;
   endTime?: number;
@@ -478,6 +479,22 @@ export const create = mutation({
       dedupeKey: args.dedupeKey,
     });
 
+    const flightTimeMs = statsExcludedReason
+      ? 0
+      : getRecordedFlightDurationMs(args);
+    const distanceNm = statsExcludedReason
+      ? 0
+      : calculateRouteDistanceNm(args.routeData);
+    await recordFlightTelemetry(ctx, args.startTime, {
+      userId: args.userId,
+      aircraftType: args.aircraftType,
+      depICAO: args.depICAO,
+      arrICAO: args.arrICAO,
+      included: !statsExcludedReason,
+      durationMs: flightTimeMs,
+      distanceNm,
+    });
+
     if (statsExcludedReason) {
       return flightId;
     }
@@ -487,8 +504,6 @@ export const create = mutation({
       .withIndex("by_userId", (q) => q.eq("userId", args.userId))
       .first();
 
-    const flightTimeMs = getRecordedFlightDurationMs(args);
-    const distanceNm = calculateRouteDistanceNm(args.routeData);
     const flightDate = utcDateStringFromTimestamp(args.startTime);
 
     if (!stats) {

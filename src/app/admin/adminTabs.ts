@@ -5,6 +5,7 @@ export const ADMIN_TABS = [
   "virtual-airlines",
   "pro",
   "activity",
+  "telemetry",
   "moderation",
   "acars-moderation",
 ] as const;

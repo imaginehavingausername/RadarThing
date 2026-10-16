@@ -15,6 +15,14 @@ interface ActiveFlightSessionDoc {
   updatedAt: number;
 }
 
+interface LiveHourDoc {
+  hourStart: number;
+  peak: number;
+  sampleSum: number;
+  sampleCount: number;
+  last: number;
+}
+
 type PersistedSession = Omit<
   ActiveFlightSessionDoc,
   "_id" | "_creationTime" | "updatedAt"
@@ -36,12 +44,31 @@ function session(
 function createMockCtx(initialDocs: ActiveFlightSessionDoc[] = []) {
   let nextId = initialDocs.length + 1;
   const docs = initialDocs.map((doc) => ({ ...doc }));
+  const liveHours: (LiveHourDoc & { _id: string })[] = [];
 
   const db = {
     get(id: string) {
       return Promise.resolve({ _id: id, isDeleted: false });
     },
     query(tableName: string) {
+      if (tableName === "telemetryLiveHours") {
+        let hourStart: number | null = null;
+        return {
+          withIndex(_indexName: string, predicate: (q: unknown) => unknown) {
+            predicate({
+              eq(_field: string, value: number) {
+                hourStart = value;
+              },
+            });
+            return this;
+          },
+          first() {
+            return Promise.resolve(
+              liveHours.find((hour) => hour.hourStart === hourStart) ?? null,
+            );
+          },
+        };
+      }
       assert.equal(tableName, "activeFlightSessions");
       let userIdFilter: string | null = null;
 
@@ -74,12 +101,22 @@ function createMockCtx(initialDocs: ActiveFlightSessionDoc[] = []) {
       tableName: string,
       value: Omit<ActiveFlightSessionDoc, "_id" | "_creationTime">,
     ) {
+      if (tableName === "telemetryLiveHours") {
+        const _id = `hour-${nextId++}`;
+        liveHours.push({ _id, ...(value as unknown as LiveHourDoc) });
+        return Promise.resolve(_id);
+      }
       assert.equal(tableName, "activeFlightSessions");
       const _id = `doc-${nextId++}`;
       docs.push({ _id, _creationTime: Date.now(), ...value });
       return Promise.resolve(_id);
     },
     patch(_id: string, value: Partial<ActiveFlightSessionDoc>) {
+      const hour = liveHours.find((candidate) => candidate._id === _id);
+      if (hour) {
+        Object.assign(hour, value);
+        return Promise.resolve();
+      }
       const doc = docs.find((candidate) => candidate._id === _id);
       assert.ok(doc);
       Object.assign(doc, value);
@@ -96,6 +133,7 @@ function createMockCtx(initialDocs: ActiveFlightSessionDoc[] = []) {
   return {
     ctx: { db },
     docs,
+    liveHours,
   };
 }
 
@@ -147,6 +185,23 @@ test("replaceAll patches existing sessions, inserts new sessions, and deletes mi
     ["user-1", "disconnected"],
     ["user-2", "active"],
   ]);
+});
+
+test("replaceAll records live flight samples into the current hour bucket", async () => {
+  const { ctx, liveHours } = createMockCtx();
+
+  await callHandler(replaceAll as never, ctx, {
+    sessions: [session("user-1"), session("user-2"), session("user-3")],
+  });
+  await callHandler(replaceAll as never, ctx, {
+    sessions: [session("user-1"), session("user-2", "disconnected")],
+  });
+
+  assert.equal(liveHours.length, 1);
+  assert.equal(liveHours[0]?.peak, 3);
+  assert.equal(liveHours[0]?.last, 1);
+  assert.equal(liveHours[0]?.sampleSum, 4);
+  assert.equal(liveHours[0]?.sampleCount, 2);
 });
 
 test("replaceAll processes duplicate incoming userIds once", async () => {

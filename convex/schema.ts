@@ -122,6 +122,63 @@ export default defineSchema({
     .index("by_startTime", ["startTime"])
     .index("by_dedupeKey", ["dedupeKey"]),
 
+  // Super-admin product telemetry. One rollup per UTC day so the dashboard
+  // never has to scan raw flights (route data makes them heavy).
+  telemetryDays: defineTable({
+    day: v.string(), // YYYY-MM-DD UTC
+    dayStart: v.number(),
+    flights: v.number(),
+    countedFlights: v.number(),
+    flightTimeMs: v.number(),
+    distanceNm: v.number(),
+    pilotIds: v.array(v.id("users")),
+    aircraft: v.array(v.object({ name: v.string(), count: v.number() })),
+    airports: v.array(v.object({ name: v.string(), count: v.number() })),
+    newUsers: v.number(),
+    imagesUploaded: v.number(),
+    imagesApproved: v.number(),
+    chartsUploaded: v.number(),
+    acarsMessages: v.number(),
+    waypointReminders: v.number(),
+    // Folded in from telemetryLiveHours when the day is reconciled.
+    livePeak: v.optional(v.number()),
+    livePeakAt: v.optional(v.number()),
+    liveAvg: v.optional(v.number()),
+    flightsReconciledAt: v.optional(v.number()),
+    activityCountedAt: v.optional(v.number()),
+  }).index("by_dayStart", ["dayStart"]),
+
+  // Latest all-time counts (flights, pilots, accounts, PRO, images).
+  // Recomputed in the background so the dashboard reads a single document.
+  telemetryTotals: defineTable({
+    flights: v.number(),
+    pilots: v.number(),
+    flightTimeMs: v.number(),
+    firstDay: v.optional(v.string()),
+    lastReconciledAt: v.optional(v.number()),
+    allTimePeak: v.optional(v.number()),
+    allTimePeakAt: v.optional(v.number()),
+    users: v.number(),
+    paidPro: v.number(),
+    grantedPro: v.number(),
+    bannedUsers: v.number(),
+    approvedImages: v.number(),
+    pendingImages: v.number(),
+    updatedAt: v.number(),
+  }),
+
+  // Live flight samples, bucketed by UTC hour. Written by the radar server's
+  // 30-second session checkpoint.
+  telemetryLiveHours: defineTable({
+    hourStart: v.number(),
+    peak: v.number(),
+    peakAt: v.number(),
+    sampleSum: v.number(),
+    sampleCount: v.number(),
+    last: v.number(),
+    lastAt: v.number(),
+  }).index("by_hourStart", ["hourStart"]),
+
   activeFlightSessions: defineTable({
     userId: v.id("users"),
     state: v.union(v.literal("active"), v.literal("disconnected")),

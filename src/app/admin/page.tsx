@@ -15,6 +15,7 @@ import {
   Upload,
   Flag,
   Activity,
+  BarChart3,
 } from "lucide-react";
 import { useProStatus } from "~/hooks/useProStatus";
 import {
@@ -35,6 +36,10 @@ import {
   getAdminTabFromPath,
   getAdminTabHref,
 } from "./adminTabs";
+
+function isSuperAdminTab(tab: MainTab) {
+  return tab === "pro" || tab === "activity" || tab === "telemetry";
+}
 
 const AircraftImagesTab = dynamic(
   () =>
@@ -87,6 +92,16 @@ const AdminTelemetryTab = dynamic(
   () =>
     import("./_components/AdminTelemetryTab").then(
       (mod) => mod.AdminTelemetryTab,
+    ),
+  {
+    loading: () => <AdminTabSkeleton />,
+  },
+);
+
+const ProductTelemetryTab = dynamic(
+  () =>
+    import("./_components/ProductTelemetryTab").then(
+      (mod) => mod.ProductTelemetryTab,
     ),
   {
     loading: () => <AdminTabSkeleton />,
@@ -180,7 +195,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (!isLoaded || proStatusLoading || !isAdminUser) return;
-    if ((mainTab === "pro" || mainTab === "activity") && !isSuperAdmin) {
+    if (isSuperAdminTab(mainTab) && !isSuperAdmin) {
       router.replace("/admin");
     }
   }, [isLoaded, proStatusLoading, isAdminUser, isSuperAdmin, mainTab, router]);
@@ -193,7 +208,7 @@ export default function AdminPage() {
     return <AdminAccessDenied />;
   }
 
-  if ((mainTab === "pro" || mainTab === "activity") && !isSuperAdmin) {
+  if (isSuperAdminTab(mainTab) && !isSuperAdmin) {
     return <AdminSkeleton />;
   }
 
@@ -219,6 +234,9 @@ export default function AdminPage() {
     ...(isSuperAdmin ? [{ value: "pro" as const, label: "Pro" }] : []),
     ...(isSuperAdmin
       ? [{ value: "activity" as const, label: "Activity" }]
+      : []),
+    ...(isSuperAdmin
+      ? [{ value: "telemetry" as const, label: "Telemetry" }]
       : []),
   ];
 
@@ -357,6 +375,19 @@ export default function AdminPage() {
               Activity
             </button>
           )}
+          {isSuperAdmin && (
+            <button
+              onClick={() => router.push(getAdminTabHref("telemetry"))}
+              className={`flex cursor-pointer items-center gap-2 rounded-lg px-4 py-2.5 font-medium transition-all ${
+                mainTab === "telemetry"
+                  ? "bg-cyan-500/20 text-cyan-400"
+                  : "bg-white/5 text-slate-400 hover:bg-white/10"
+              }`}
+            >
+              <BarChart3 className="h-4 w-4" />
+              Telemetry
+            </button>
+          )}
         </div>
 
         {mainTab === "images" && (
@@ -373,6 +404,11 @@ export default function AdminPage() {
         )}
         {mainTab === "pro" && isSuperAdmin && (
           <ProManagementTab
+            canRunSuperAdminQueries={canRunAdminQueries && isSuperAdmin}
+          />
+        )}
+        {mainTab === "telemetry" && isSuperAdmin && (
+          <ProductTelemetryTab
             canRunSuperAdminQueries={canRunAdminQueries && isSuperAdmin}
           />
         )}

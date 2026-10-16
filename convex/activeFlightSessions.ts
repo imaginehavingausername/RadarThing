@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireSystem } from "./lib/auth";
+import { recordLiveSample } from "./lib/telemetry";
 
 const persistedSessionValidator = v.object({
   userId: v.id("users"),
@@ -83,6 +84,12 @@ export const replaceAll = mutation({
         });
       }
     }
+
+    let liveFlights = 0;
+    for (const session of sessionsByUserId.values()) {
+      if (session.state === "active") liveFlights++;
+    }
+    await recordLiveSample(ctx, liveFlights, now);
 
     return {
       saved: sessionsByUserId.size,

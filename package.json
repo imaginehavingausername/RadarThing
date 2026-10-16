@@ -22,7 +22,8 @@
     "preview": "next build && next start",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test:moderation": "tsx --test convex/moderation.test.ts"
+    "test:moderation": "tsx --test convex/moderation.test.ts",
+    "test:telemetry": "tsx --test convex/telemetry.test.ts"
   },
   "engines": {
     "node": ">=20 <26",

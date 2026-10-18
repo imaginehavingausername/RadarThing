@@ -49,6 +49,8 @@
   const ACARS_DRAFT_ID = "radarthing-acars-draft";
   const ACARS_PUBLISH_ID = "radarthing-acars-publish";
   const ACARS_LIST_ID = "radarthing-acars-list";
+  const ACARS_TOGGLE_ID = "radarthing-acars-toggle";
+  const ACARS_BODY_ID = "radarthing-acars-body";
 
   let flightUI;
   let mobileFlightUIOpenButton;
@@ -2328,11 +2330,16 @@
       </div>
 
       <section id="${ACARS_PANEL_ID}" style="display:none;margin:10px 0 0;padding:10px;border:1px solid rgba(34,211,238,.22);border-radius:10px;background:rgba(8,47,73,.24)">
-        <div style="font-size:10px;font-weight:700;letter-spacing:.14em;color:#67e8f9;margin-bottom:7px">ACARS</div>
+        <button id="${ACARS_TOGGLE_ID}" type="button" aria-expanded="false" aria-controls="${ACARS_BODY_ID}" style="display:flex;width:100%;align-items:center;justify-content:space-between;padding:0;border:0;background:none;color:#67e8f9;font-size:10px;font-weight:700;letter-spacing:.14em;cursor:pointer">
+          <span>ACARS</span>
+          <span aria-hidden="true" data-acars-chevron style="display:inline-block;transition:transform .15s">&#9662;</span>
+        </button>
+        <div id="${ACARS_BODY_ID}" hidden style="margin-top:7px">
         <textarea id="${ACARS_DRAFT_ID}" maxlength="500" rows="3" placeholder="Write a flight update for viewers…" aria-label="New ACARS entry" style="box-sizing:border-box;width:100%;resize:vertical;padding:8px;border:1px solid rgba(255,255,255,.14);border-radius:7px;background:rgba(2,6,23,.75);color:#fff;font:11px system-ui"></textarea>
         <div style="margin-top:4px;color:#94a3b8;font-size:9px">Visible to viewers until removed.</div>
         <button id="${ACARS_PUBLISH_ID}" type="button" style="width:100%;margin-top:7px;padding:8px;border:1px solid rgba(34,211,238,.35);border-radius:7px;background:rgba(34,211,238,.14);color:#67e8f9;font-size:10px;font-weight:700;cursor:pointer">Publish ACARS</button>
         <div id="${ACARS_LIST_ID}" aria-live="polite" style="margin-top:8px;max-height:160px;overflow-y:auto;color:#cbd5e1;font-size:10px">No ACARS entries yet.</div>
+        </div>
       </section>
 
       <p id="${SIGN_IN_NOTICE_ID}" style="
@@ -2416,6 +2423,17 @@
     document
       .getElementById(ACARS_PUBLISH_ID)
       .addEventListener("click", () => void publishAcars());
+    document
+      .getElementById(ACARS_TOGGLE_ID)
+      .addEventListener("click", (event) => {
+        const toggle = event.currentTarget;
+        const body = document.getElementById(ACARS_BODY_ID);
+        const expanded = toggle.getAttribute("aria-expanded") !== "true";
+        toggle.setAttribute("aria-expanded", String(expanded));
+        body.hidden = !expanded;
+        toggle.querySelector("[data-acars-chevron]").style.transform =
+          expanded ? "rotate(180deg)" : "";
+      });
 
     if (isMobile) {
       mobileFlightUIOpenButton = document.createElement("button");

@@ -21,6 +21,7 @@ export function AcarsPanel({ googleId }: { googleId?: string }) {
   const [reason, setReason] = useState("");
   const [reportError, setReportError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   if (!entries?.length) return null;
 
@@ -63,17 +64,44 @@ export function AcarsPanel({ googleId }: { googleId?: string }) {
       aria-label="Pilot ACARS"
       className="mb-3 rounded-2xl border border-cyan-400/20 bg-cyan-500/[0.06] p-3.5 shadow-lg"
     >
-      <div className="mb-2 flex items-center justify-between gap-2">
+      <button
+        type="button"
+        aria-expanded={expanded}
+        aria-controls={`acars-messages-${googleId}`}
+        onClick={() => setExpanded((value) => !value)}
+        className="flex w-full cursor-pointer items-center justify-between gap-2 text-left"
+      >
         <h2 className="font-mono text-[10px] font-black tracking-[0.2em] text-cyan-300 uppercase">
           Pilot ACARS
+          <span className="ml-2 tracking-normal text-white/35">
+            ({entries.length})
+          </span>
         </h2>
-        <span className="font-mono text-[9px] text-white/35">Latest first</span>
-      </div>
+        <span className="flex items-center gap-2 font-mono text-[9px] text-white/35">
+          {expanded && "Latest first"}
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+            className={`text-cyan-300 transition-transform ${expanded ? "rotate-180" : ""}`}
+          >
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </span>
+      </button>
       <div
+        id={`acars-messages-${googleId}`}
+        hidden={!expanded}
         tabIndex={0}
         role="region"
         aria-label="ACARS messages"
-        className="custom-scrollbar max-h-64 space-y-2 overflow-y-auto overscroll-contain"
+        className="custom-scrollbar mt-2 max-h-64 space-y-2 overflow-y-auto overscroll-contain"
       >
         {entries.map((entry) => (
           <article

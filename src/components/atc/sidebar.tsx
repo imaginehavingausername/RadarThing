@@ -92,6 +92,7 @@ import { AdSenseInContent } from "~/components/ads/AdSenseInContent";
 import { AircraftControlPanel } from "./AircraftControlPanel";
 import { AcarsPanel } from "./AcarsPanel";
 import Link from "next/link";
+import { Tooltip as TooltipPrimitive } from "radix-ui";
 import { Analytics } from "~/lib/analytics";
 import { useUnitPreferences } from "~/hooks/useUnitPreferences";
 import { useTimeDisplayPreference } from "~/hooks/useTimeDisplayPreference";
@@ -932,7 +933,9 @@ export const Sidebar = ({
                 <div className="grid grid-cols-4 gap-2 rounded-2xl border border-white/10 bg-black/30 p-2.5">
                   <MiniStat label="V/S" value={displayValues.vspeed} />
                   <MiniStat label="HDG" value={displayValues.heading} />
-                  <MiniStat label="SQWK" value={displayValues.squawk} />
+                  <SquawkTooltip squawk={displayValues.squawk}>
+                    <MiniStat label="SQWK" value={displayValues.squawk} />
+                  </SquawkTooltip>
                   <MiniStat label="AGL" value={displayValues.altAGL} />
                 </div>
 
@@ -1021,12 +1024,14 @@ export const Sidebar = ({
                       sub="MAG"
                       delay={3}
                     />
-                    <StatBox
-                      label="Squawk"
-                      value={displayValues.squawk}
-                      sub="XPDR"
-                      delay={4}
-                    />
+                    <SquawkTooltip squawk={displayValues.squawk}>
+                      <StatBox
+                        label="Squawk"
+                        value={displayValues.squawk}
+                        sub="XPDR"
+                        delay={4}
+                      />
+                    </SquawkTooltip>
                     <StatBox
                       label="Alt AGL"
                       value={displayValues.altAGL}
@@ -1179,6 +1184,43 @@ const FlightTimelineCard = ({
         )}
       </div>
     </div>
+  );
+};
+
+const EMERGENCY_SQUAWK_MEANINGS: Record<string, string> = {
+  "7500": "Unlawful interference (hijack)",
+  "7600": "Loss of communications (radio failure)",
+  "7700": "General emergency",
+};
+
+const SquawkTooltip = ({
+  squawk,
+  children,
+}: {
+  squawk: string;
+  children: React.ReactNode;
+}) => {
+  const meaning = EMERGENCY_SQUAWK_MEANINGS[squawk.trim()];
+  if (!meaning) return <>{children}</>;
+
+  return (
+    <TooltipPrimitive.Provider delayDuration={150}>
+      <TooltipPrimitive.Root>
+        <TooltipPrimitive.Trigger asChild>
+          <div className="grid">{children}</div>
+        </TooltipPrimitive.Trigger>
+        <TooltipPrimitive.Portal>
+          <TooltipPrimitive.Content
+            side="top"
+            sideOffset={6}
+            className="z-[10000] rounded-lg border border-red-500/40 bg-black/90 px-2.5 py-1.5 font-mono text-[10px] font-black tracking-wide text-red-300 shadow-xl"
+          >
+            {squawk} — {meaning}
+            <TooltipPrimitive.Arrow className="fill-black/90" />
+          </TooltipPrimitive.Content>
+        </TooltipPrimitive.Portal>
+      </TooltipPrimitive.Root>
+    </TooltipPrimitive.Provider>
   );
 };
 

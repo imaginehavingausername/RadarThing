@@ -44,6 +44,26 @@ function normalizeAntonovAircraftType(cleaned: string): string | null {
   return null;
 }
 
+function normalizeDornierAircraftType(cleaned: string): string | null {
+  if (/\b(?:DORNIER\s+)?(?:DO[-\s]?)?328[-\s]?JET\b|\bJ328\b/.test(cleaned)) {
+    return "J328";
+  }
+
+  const dornierMatch =
+    /\bDORNIER\b(?:\s+DO)?[-\s]?(\d{2,3})\b/.exec(cleaned) ||
+    /\bDO[-\s]?(\d{2,3})\b/.exec(cleaned) ||
+    /\bD(228|328)\b/.exec(cleaned);
+  if (dornierMatch) {
+    const model = dornierMatch[1];
+    if (!model) return null;
+    return /^(228|328)$/.test(model) ? `D${model}` : `DO${model}`;
+  }
+
+  if (cleaned === "DORNIER") return "D328";
+
+  return null;
+}
+
 /** Normalize aircraft type (e.g., "Boeing 777-300ER" -> "B777", "Airbus A350-900" -> "A350") */
 export function normalizeAircraftType(type: string | undefined): string | null {
   if (!type) return null;
@@ -54,6 +74,9 @@ export function normalizeAircraftType(type: string | undefined): string | null {
 
   const bombardierMatch = normalizeBombardierAircraftType(cleaned);
   if (bombardierMatch) return bombardierMatch;
+
+  const dornierMatch = normalizeDornierAircraftType(cleaned);
+  if (dornierMatch) return dornierMatch;
 
   const poseidonMatch = /\bP-?8(?:I)?\b/.exec(cleaned);
   if (poseidonMatch) return "P8";
@@ -300,6 +323,9 @@ export function getCompactAircraftType(
 
   const compactAntonov = normalizeAntonovAircraftType(cleaned);
   if (compactAntonov) return compactAntonov;
+
+  const compactDornier = normalizeDornierAircraftType(cleaned);
+  if (compactDornier) return compactDornier;
 
   if (/^[A-Z0-9]{3,5}$/.test(cleaned)) return cleaned;
 

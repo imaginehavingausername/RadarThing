@@ -25,3 +25,13 @@ test("normalizes the Airbus A220-300 to its ICAO designator BCS3", () => {
   assert.equal(getCompactAircraftType("A220"), "BCS3");
   assert.equal(getCompactAircraftType("A220-100"), "A221");
 });
+
+test("normalizes Dornier names to ICAO type designators", () => {
+  assert.equal(normalizeAircraftType("DORNIER"), "D328");
+  assert.equal(getCompactAircraftType("DORNIER"), "D328");
+  assert.equal(getCompactAircraftType("Dornier 328"), "D328");
+  assert.equal(getCompactAircraftType("Dornier Do 328"), "D328");
+  assert.equal(getCompactAircraftType("Do-228"), "D228");
+  assert.equal(getCompactAircraftType("Dornier 328JET"), "J328");
+  assert.equal(getCompactAircraftType("Fairchild Dornier 328 Jet"), "J328");
+});

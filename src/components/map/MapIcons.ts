@@ -277,6 +277,8 @@ function getSpecificAircraftIconUrl(normalizedType: string, rawType: string) {
   if (/^(C130|L100)$/.test(normalizedType)) return ADSB_RADAR_ICON_URLS.c130;
   if (/^(A124|AN124)$/.test(normalizedType)) return ADSB_RADAR_ICON_URLS.b747;
   if (/^(A140|AN140)$/.test(normalizedType)) return ADSB_RADAR_ICON_URLS.dh8a;
+  if (/^(D228|D328)$/.test(normalizedType)) return ADSB_RADAR_ICON_URLS.dh8a;
+  if (normalizedType === "J328") return ADSB_RADAR_ICON_URLS.erj;
   if (/^(MD11|DC10|L1011|IL96)$/.test(normalizedType)) {
     return ADSB_RADAR_ICON_URLS.md11;
   }

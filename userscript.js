@@ -65,35 +65,6 @@
     };
   }
 
-  function showToast(message, isError = false) {
-    const toast = document.createElement("div");
-    toast.textContent = message;
-    toast.style.cssText = `
-      position: fixed;
-      bottom: 24px;
-      left: 24px;
-      z-index: 1000002;
-      border-radius: 12px;
-      padding: 10px 14px;
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      color: #fff;
-      background: ${isError ? "rgba(239,68,68,0.92)" : "rgba(245,158,11,0.92)"};
-      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.38);
-      opacity: 0;
-      transition: opacity 0.2s ease;
-    `;
-    document.body.appendChild(toast);
-    requestAnimationFrame(() => {
-      toast.style.opacity = "1";
-    });
-    setTimeout(() => {
-      toast.style.opacity = "0";
-      setTimeout(() => toast.remove(), 250);
-    }, 2400);
-  }
-
   // Command execution handlers
   function executeCommand(cmd) {
     const geofs = window.geofs;
@@ -265,7 +236,6 @@
           window.dispatchEvent(
             new CustomEvent("radarthing-flight-disconnected"),
           );
-          showToast("RADAR DISCONNECTED");
           break;
 
         default:
@@ -323,7 +293,7 @@
   function broadcastStatus() {
     let status = { text: "Flight info required", color: "#94a3b8" };
     if (info.active) {
-      status = { text: "Transmitting to API", color: "#27ae60" };
+      status = { text: "Transmitting to API", color: "#7dd3fc" };
     }
     window.dispatchEvent(
       new CustomEvent("atc-status-update", { detail: status }),
@@ -332,7 +302,10 @@
 
   window.addEventListener("atc-data-sync", (e) => {
     const wasActive = info.active;
-    if (typeof e.detail?.takeoffTime === "string" && e.detail.takeoffTime.trim()) {
+    if (
+      typeof e.detail?.takeoffTime === "string" &&
+      e.detail.takeoffTime.trim()
+    ) {
       takeoffTimeUTC = e.detail.takeoffTime.trim();
     }
     info = {

@@ -346,24 +346,12 @@ function getRadarLineStyle(
   isSelected: boolean,
 ): { color: string; opacity: number; weight: number } {
   const isEmergency = aircraft.squawk && EMERGENCY_SQUAWKS.has(aircraft.squawk);
-  const isIdentActive =
-    aircraft.identActive ||
-    (typeof aircraft.identUntil === "number" &&
-      aircraft.identUntil > Date.now());
 
   if (isEmergency) {
     return {
       color: "#ef4444",
       opacity: isSelected ? 0.95 : 0.8,
       weight: isSelected ? 2.6 : 1.7,
-    };
-  }
-
-  if (isIdentActive) {
-    return {
-      color: "#fbbf24",
-      opacity: isSelected ? 0.95 : 0.82,
-      weight: isSelected ? 2.5 : 1.6,
     };
   }
 

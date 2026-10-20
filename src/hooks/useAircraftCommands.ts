@@ -15,7 +15,6 @@ export type CommandType =
   | "disableNav"
   | "setWaypoint"
   | "toggleAutopilot"
-  | "requestIdent"
   | "disconnectFlight";
 
 interface Command {
@@ -159,15 +158,6 @@ export function useAircraftCommands() {
     [sendCommand],
   );
 
-  const requestIdent = useCallback(
-    (targetId: string, durationSeconds = 15) =>
-      sendCommand({
-        targetId,
-        command: { type: "requestIdent", value: durationSeconds },
-      }),
-    [sendCommand],
-  );
-
   const disconnectFlight = useCallback(
     async (targetId: string, targetGoogleId?: string | null) => {
       setIsLoading(true);
@@ -227,7 +217,6 @@ export function useAircraftCommands() {
     disableNav,
     setWaypoint,
     toggleAutopilot,
-    requestIdent,
     disconnectFlight,
     isLoading,
     error,

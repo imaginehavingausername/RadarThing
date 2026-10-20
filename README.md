@@ -32,7 +32,7 @@ Tampermonkey installs are persistent. Console installs use the same hosted loade
 ### Pilot and Controller Tools
 
 - **Heading Mode** for measuring headings between points on the map.
-- **Remote aircraft commands** for supported clients, including speed, altitude, heading, vertical speed, squawk, flaps, NAV/HDG mode, waypoint selection, autopilot toggles, and IDENT requests.
+- **Remote aircraft commands** for supported clients, including speed, altitude, heading, vertical speed, squawk, flaps, NAV/HDG mode, waypoint selection, and autopilot toggles.
 - **Flight plan drawing** with waypoint speed and altitude details.
 - **Waypoint ETAs** and remaining route distance for active flights.
 - **Pilot ACARS** updates composed in the GeoFS userscript and shown in the selected aircraft sidebar.

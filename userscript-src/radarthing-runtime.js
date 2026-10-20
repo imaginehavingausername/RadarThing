@@ -35,8 +35,8 @@
   const SEABUS_TOGGLE_ID = "atc-toggle-seabus";
   const CHARTS_BTN_ID = "atc-charts-btn";
   const AF_INPUT_ID = "atc-afInput";
-  const IDENT_BTN_ID = "atc-ident-btn";
-  const IDENT_REQUEST_WINDOW_MS = 60000;
+  const AF_FIELD_WRAP_ID = "atc-afFieldWrap";
+  const MILITARY_CHECKBOX_ID = "atc-militaryCheckbox";
   const RESUME_FLIGHT_API = "https://sse.radarthing.com/api/resume-flight";
   const RESUME_MODAL_ID = "radarthing-resume-flight-modal";
   const TRACKING_STATUS_API =
@@ -56,9 +56,6 @@
   let mobileFlightUIOpenButton;
   let keybindMode = null;
   let lastSyncedPlan = "";
-  let identRequestUntil = 0;
-  let identRequestDurationSeconds = 15;
-  let identActiveUntil = 0;
   let resumePromptCheckStarted = false;
   let resumePromptResolved = false;
   let resumeModalResolver = null;
@@ -640,48 +637,6 @@
     );
   }
 
-  function updateIdentUI() {
-    const buttonEl = document.getElementById(IDENT_BTN_ID);
-    if (!buttonEl) return;
-
-    const now = Date.now();
-    const pendingRequest = identRequestUntil > now;
-    const identActive = identActiveUntil > now;
-
-    buttonEl.disabled = false;
-    buttonEl.style.cursor = "pointer";
-
-    if (identActive) {
-      const remaining = Math.max(1, Math.ceil((identActiveUntil - now) / 1000));
-      buttonEl.textContent = `ACTIVE ${remaining}s`;
-      buttonEl.style.borderColor = "rgba(251,191,36,0.45)";
-      buttonEl.style.background =
-        "linear-gradient(135deg, rgba(251,191,36,0.32), rgba(245,158,11,0.18))";
-      buttonEl.style.color = "#fef3c7";
-      return;
-    }
-
-    if (pendingRequest) {
-      const remaining = Math.max(
-        1,
-        Math.ceil((identRequestUntil - now) / 1000),
-      );
-      buttonEl.textContent = "CONFIRM";
-      buttonEl.style.borderColor = "rgba(251,191,36,0.45)";
-      buttonEl.style.background =
-        "linear-gradient(135deg, rgba(251,191,36,0.28), rgba(245,158,11,0.14))";
-      buttonEl.style.color = "#fef3c7";
-      buttonEl.title = `ATC requested IDENT. Confirm within ${remaining}s.`;
-      return;
-    }
-
-    buttonEl.textContent = "IDENT";
-    buttonEl.style.borderColor = "rgba(251,191,36,0.3)";
-    buttonEl.style.background = "rgba(251,191,36,0.1)";
-    buttonEl.style.color = "#fcd34d";
-    buttonEl.title = "Press if ATC asks you to IDENT.";
-  }
-
   function syncFlightPlan() {
     try {
       const g = window.geofs;
@@ -827,6 +782,7 @@
     if (sqkEl)
       sqkEl.value = sanitizeSquawk(detail?.squawk || detail?.sqk || "");
     if (afEl) afEl.value = String(detail?.af || "").toUpperCase();
+    setMilitaryMode(Boolean(afEl?.value));
   }
 
   function ensureResumeFlightModal() {
@@ -1178,11 +1134,13 @@
 
   function buildInputRow(label, id, placeholder) {
     return `
-      <div style="display:flex; gap:8px; align-items:center;">
+      <label style="display:block; min-width:0;">
         <div style="
-          width:64px;
-          font-size:10px;
-          letter-spacing:0.12em;
+          margin-bottom:5px;
+          font-size:9px;
+          font-weight:600;
+          letter-spacing:0.14em;
+          text-transform:uppercase;
           color:#94a3b8;
         ">${label}</div>
         <input id="${id}"
@@ -1190,19 +1148,29 @@
           maxlength="8"
           autocomplete="off"
           style="
-            flex:1;
-            height:30px;
+            box-sizing:border-box;
+            width:100%;
+            height:32px;
             border-radius:8px;
-            background:rgba(255,255,255,0.08);
-            border:1px solid rgba(255,255,255,0.1);
+            background:rgba(255,255,255,0.04);
+            border:1px solid rgba(255,255,255,0.12);
             color:#e5e7eb;
-            padding:0 8px;
-            font-size:11px;
+            padding:0 10px;
+            font-size:12px;
             outline:none;
           "
         />
-      </div>
+      </label>
     `;
+  }
+
+  function setMilitaryMode(on) {
+    const checkbox = document.getElementById(MILITARY_CHECKBOX_ID);
+    const wrap = document.getElementById(AF_FIELD_WRAP_ID);
+    const afEl = document.getElementById(AF_INPUT_ID);
+    if (checkbox) checkbox.checked = on;
+    if (wrap) wrap.style.display = on ? "grid" : "none";
+    if (!on && afEl) afEl.value = "";
   }
 
   function buildToggleRow(label, id, checked) {
@@ -2130,13 +2098,13 @@
       max-height:calc(100dvh - 88px);
       overflow-y:auto;
       padding:16px;
-      background:rgba(2,6,23,0.75);
+      background:rgba(23,28,42,0.9);
       backdrop-filter:blur(18px);
-      border:1px solid rgba(255,255,255,0.08);
+      border:1px solid rgba(255,255,255,0.1);
       border-radius:16px;
       color:#e5e7eb;
       font-family:system-ui,-apple-system,BlinkMacSystemFont,"Inter",sans-serif;
-      box-shadow:0 20px 40px rgba(0,0,0,0.6);
+      box-shadow:0 20px 40px rgba(0,0,0,0.55);
       z-index:999999;
     `;
 
@@ -2147,56 +2115,92 @@
       flightUI.style.right = "auto";
     }
 
+    const headerButtonStyle = `
+      padding:4px 6px;
+      border:1px solid rgba(255,255,255,0.14);
+      border-radius:6px;
+      background:rgba(255,255,255,0.06);
+      color:#94a3b8;
+      font-size:8px;
+      font-weight:700;
+      letter-spacing:0.1em;
+      line-height:1;
+      text-transform:uppercase;
+      cursor:pointer;
+    `;
+    const actionButtonStyle = `
+      height:36px;
+      border-radius:10px;
+      font-size:11px;
+      font-weight:700;
+      letter-spacing:0.14em;
+      text-transform:uppercase;
+      cursor:pointer;
+    `;
+    const sectionHeaderStyle = `
+      display:flex;
+      width:100%;
+      justify-content:space-between;
+      align-items:center;
+      padding:0;
+      border:0;
+      background:none;
+      cursor:pointer;
+      font-size:9px;
+      font-weight:700;
+      letter-spacing:0.14em;
+      text-transform:uppercase;
+      color:#94a3b8;
+      user-select:none;
+    `;
+    const keybindButtonStyle = `
+      padding:4px 8px;
+      border-radius:6px;
+      border:1px solid rgba(255,255,255,0.15);
+      background:rgba(255,255,255,0.08);
+      color:#e5e7eb;
+      font-size:9px;
+      letter-spacing:0.12em;
+      cursor:pointer;
+    `;
+
     flightUI.innerHTML = `
+      <style>
+        #${UI_CONTAINER_ID} input::placeholder { color:#64748b; }
+        #${UI_CONTAINER_ID} input[type="text"]:focus,
+        #${UI_CONTAINER_ID} input:not([type]):focus {
+          border-color:rgba(125,211,252,0.5);
+        }
+      </style>
+
       <div id="${FLIGHT_UI_HEADER_ID}" style="
         position:relative;
         display:flex;
         align-items:center;
         gap:8px;
-        margin-bottom:12px;
+        margin-bottom:14px;
       ">
         <span style="
           flex:1;
           min-width:0;
-          text-align:left;
-          font-size:11px;
-          letter-spacing:0.14em;
-          text-transform:uppercase;
-          color:#22d3ee;
-          font-weight:600;
+          font-size:17px;
+          font-weight:800;
+          letter-spacing:-0.03em;
           white-space:nowrap;
-        ">RadarThing</span>
+          color:#fff;
+        ">Radar<span style="
+          background:linear-gradient(180deg,#bae6fd,#60a5fa);
+          -webkit-background-clip:text;
+          background-clip:text;
+          color:transparent;
+        ">Thing</span></span>
         <div style="
           display:flex;
-          gap:4px;
+          gap:6px;
           flex-shrink:0;
         ">
-          <button id="${FLIGHT_UI_MOVE_BTN_ID}" type="button" aria-pressed="false" title="Enable panel moving" style="
-            padding:4px 6px;
-            border:1px solid rgba(255,255,255,0.12);
-            border-radius:6px;
-            background:rgba(255,255,255,0.06);
-            color:#94a3b8;
-            font-size:8px;
-            font-weight:600;
-            letter-spacing:0.08em;
-            line-height:1;
-            text-transform:uppercase;
-            cursor:pointer;
-          ">Move panel</button>
-          <button id="${FLIGHT_UI_RESET_BTN_ID}" type="button" title="Reset panel position" style="
-            padding:4px 6px;
-            border:1px solid rgba(255,255,255,0.12);
-            border-radius:6px;
-            background:rgba(255,255,255,0.06);
-            color:#94a3b8;
-            font-size:8px;
-            font-weight:600;
-            letter-spacing:0.08em;
-            line-height:1;
-            text-transform:uppercase;
-            cursor:pointer;
-          ">Reset</button>
+          <button id="${FLIGHT_UI_MOVE_BTN_ID}" type="button" aria-pressed="false" title="Enable panel moving" style="${headerButtonStyle}">Move panel</button>
+          <button id="${FLIGHT_UI_RESET_BTN_ID}" type="button" title="Reset panel position" style="${headerButtonStyle}">Reset</button>
         </div>
         ${
           isMobile
@@ -2239,108 +2243,62 @@
         <span data-tracker-count style="margin-left:auto;font-size:9px;color:#fbbf24;white-space:nowrap;"></span>
       </div>
 
-      <div style="display:grid; gap:10px;">
-        ${buildInputRow("DEP", DEP_INPUT_ID, "ICAO")}
-        ${buildInputRow("ARR", ARR_INPUT_ID, "ICAO")}
-        ${buildInputRow("CALLSIGN", FLT_INPUT_ID, "ABC123")}
-        ${buildInputRow("SQUAWK", SQK_INPUT_ID, "7000")}
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px 8px;">
+        ${buildInputRow("Departure", DEP_INPUT_ID, "ICAO")}
+        ${buildInputRow("Arrival", ARR_INPUT_ID, "ICAO")}
+        ${buildInputRow("Callsign", FLT_INPUT_ID, "ABC123")}
+        ${buildInputRow("Squawk", SQK_INPUT_ID, "7000")}
       </div>
 
-      <div style="display:flex; gap:8px; margin-top:14px;">
-        <button id="${SAVE_BTN_ID}" style="
-          flex:1;
-          height:36px;
-          border-radius:10px;
-          border:1px solid rgba(34,211,238,0.3);
-          background:rgba(34,211,238,0.15);
-          color:#67e8f9;
-          font-size:11px;
-          font-weight:600;
-          letter-spacing:0.12em;
-          text-transform:uppercase;
+      <label style="
+        display:flex;
+        align-items:center;
+        gap:8px;
+        margin-top:12px;
+        font-size:11px;
+        color:#cbd5e1;
+        cursor:pointer;
+        user-select:none;
+      ">
+        <input id="${MILITARY_CHECKBOX_ID}" type="checkbox" style="
+          width:14px;
+          height:14px;
+          margin:0;
+          accent-color:#7dd3fc;
           cursor:pointer;
-        ">Save</button>
+        " />
+        Military
+      </label>
+      <div id="${AF_FIELD_WRAP_ID}" style="display:none; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px;">
+        ${buildInputRow("Air force", AF_INPUT_ID, "USAF")}
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:14px;">
+        <button id="${SAVE_BTN_ID}" style="
+          ${actionButtonStyle}
+          border:1px solid rgba(125,211,252,0.35);
+          background:rgba(56,189,248,0.14);
+          color:#7dd3fc;
+        ">Transmit</button>
 
         <button id="${CLEAR_BTN_ID}" style="
-          flex:1;
-          height:36px;
-          border-radius:10px;
-          border:1px solid rgba(239,68,68,0.3);
-          background:rgba(239,68,68,0.12);
-          color:#fca5a5;
-          font-size:11px;
-          font-weight:600;
-          letter-spacing:0.12em;
-          text-transform:uppercase;
-          cursor:pointer;
+          ${actionButtonStyle}
+          border:1px solid rgba(255,255,255,0.14);
+          background:rgba(255,255,255,0.04);
+          color:#e2e8f0;
         ">Save/Clear</button>
       </div>
 
-      <div style="
-        display:flex;
-        justify-content:space-between;
-        align-items:center;
-        margin-top:10px;
-        font-size:9px;
-        color:#94a3b8;
-      ">
-        <span>Toggle key</span>
-        <button id="${KEYBIND_BTN_ID}" style="
-          padding:4px 8px;
-          border-radius:6px;
-          border:1px solid rgba(255,255,255,0.15);
-          background:rgba(255,255,255,0.08);
-          color:#e5e7eb;
-          font-size:9px;
-          letter-spacing:0.12em;
-          cursor:pointer;
-        ">${toggleKey.toUpperCase()}</button>
-      </div>
-
-      <div style="
-        display:flex;
-        justify-content:space-between;
-        align-items:center;
-        margin-top:6px;
-        font-size:9px;
-        color:#94a3b8;
-      ">
-        <span>Charts key</span>
-        <button id="${CHARTS_KEYBIND_BTN_ID}" style="
-          padding:4px 8px;
-          border-radius:6px;
-          border:1px solid rgba(255,255,255,0.15);
-          background:rgba(255,255,255,0.08);
-          color:#e5e7eb;
-          font-size:9px;
-          letter-spacing:0.12em;
-          cursor:pointer;
-        ">${chartsToggleKey.toUpperCase()}</button>
-      </div>
-
       <div id="${STATUS_INDICATOR_ID}" style="
-        margin-top:8px;
+        margin-top:10px;
         text-align:center;
         font-size:10px;
-        letter-spacing:0.1em;
+        letter-spacing:0.14em;
         text-transform:uppercase;
-        color:#f87171;
+        color:#94a3b8;
       ">
         Flight info required
       </div>
-
-      <section id="${ACARS_PANEL_ID}" style="display:none;margin:10px 0 0;padding:10px;border:1px solid rgba(34,211,238,.22);border-radius:10px;background:rgba(8,47,73,.24)">
-        <button id="${ACARS_TOGGLE_ID}" type="button" aria-expanded="false" aria-controls="${ACARS_BODY_ID}" style="display:flex;width:100%;align-items:center;justify-content:space-between;padding:0;border:0;background:none;color:#67e8f9;font-size:10px;font-weight:700;letter-spacing:.14em;cursor:pointer">
-          <span>ACARS</span>
-          <span aria-hidden="true" data-acars-chevron style="display:inline-block;transition:transform .15s">&#9662;</span>
-        </button>
-        <div id="${ACARS_BODY_ID}" hidden style="margin-top:7px">
-        <textarea id="${ACARS_DRAFT_ID}" maxlength="500" rows="3" placeholder="Write a flight update for viewers…" aria-label="New ACARS entry" style="box-sizing:border-box;width:100%;resize:vertical;padding:8px;border:1px solid rgba(255,255,255,.14);border-radius:7px;background:rgba(2,6,23,.75);color:#fff;font:11px system-ui"></textarea>
-        <div style="margin-top:4px;color:#94a3b8;font-size:9px">Visible to viewers until removed.</div>
-        <button id="${ACARS_PUBLISH_ID}" type="button" style="width:100%;margin-top:7px;padding:8px;border:1px solid rgba(34,211,238,.35);border-radius:7px;background:rgba(34,211,238,.14);color:#67e8f9;font-size:10px;font-weight:700;cursor:pointer">Publish ACARS</button>
-        <div id="${ACARS_LIST_ID}" aria-live="polite" style="margin-top:8px;max-height:160px;overflow-y:auto;color:#cbd5e1;font-size:10px">No ACARS entries yet.</div>
-        </div>
-      </section>
 
       <p id="${SIGN_IN_NOTICE_ID}" style="
         margin:8px 0 0;
@@ -2352,18 +2310,21 @@
         Sign in to GeoFS to appear on the radar. Signed-out flights are not shown.
       </p>
 
-      <div style="margin-top:10px; border-top:1px solid rgba(255,255,255,0.06); padding-top:8px;">
-        <div id="${RADAR_SETTINGS_HEADER_ID}" style="
-          display:flex;
-          justify-content:space-between;
-          align-items:center;
-          cursor:pointer;
-          font-size:9px;
-          letter-spacing:0.12em;
-          text-transform:uppercase;
-          color:#94a3b8;
-          user-select:none;
-        ">
+      <section id="${ACARS_PANEL_ID}" style="display:none; margin-top:10px; border-top:1px solid rgba(255,255,255,0.08); padding-top:10px;">
+        <button id="${ACARS_TOGGLE_ID}" type="button" aria-expanded="false" aria-controls="${ACARS_BODY_ID}" style="${sectionHeaderStyle}">
+          <span>ACARS Updates</span>
+          <span aria-hidden="true" data-acars-chevron style="display:inline-block;font-size:8px;transition:transform .2s">&#9654;</span>
+        </button>
+        <div id="${ACARS_BODY_ID}" hidden style="margin-top:10px">
+        <textarea id="${ACARS_DRAFT_ID}" maxlength="500" rows="3" placeholder="Write a flight update for viewers…" aria-label="New ACARS entry" style="box-sizing:border-box;width:100%;resize:vertical;padding:8px 10px;border:1px solid rgba(255,255,255,.12);border-radius:10px;background:rgba(255,255,255,.04);color:#e5e7eb;font:12px system-ui;outline:none"></textarea>
+        <div style="margin-top:4px;color:#94a3b8;font-size:9px">Visible to viewers until removed.</div>
+        <button id="${ACARS_PUBLISH_ID}" type="button" style="width:100%;margin-top:8px;height:34px;border:1px solid rgba(125,211,252,.35);border-radius:10px;background:rgba(56,189,248,.14);color:#7dd3fc;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;cursor:pointer">Publish ACARS</button>
+        <div id="${ACARS_LIST_ID}" aria-live="polite" style="margin-top:8px;max-height:160px;overflow-y:auto;color:#cbd5e1;font-size:10px">No ACARS entries yet.</div>
+        </div>
+      </section>
+
+      <div style="margin-top:10px; border-top:1px solid rgba(255,255,255,0.08); padding-top:10px;">
+        <div id="${RADAR_SETTINGS_HEADER_ID}" style="${sectionHeaderStyle}">
           <span>Radar Settings</span>
           <span id="${RADAR_SETTINGS_ARROW_ID}" style="
             font-size:8px;
@@ -2376,42 +2337,40 @@
           padding:0 2px;
         ">
           ${buildToggleRow("Seabus Radar", SEABUS_TOGGLE_ID, radarPrefs.seabus)}
-          <div style="margin-top:6px;">
-            ${buildInputRow("AF", AF_INPUT_ID, "USAF")}
+          <div style="display:flex; justify-content:space-between; align-items:center; font-size:10px; color:#94a3b8; letter-spacing:0.08em;">
+            <span>Toggle key</span>
+            <button id="${KEYBIND_BTN_ID}" style="${keybindButtonStyle}">${toggleKey.toUpperCase()}</button>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; font-size:10px; color:#94a3b8; letter-spacing:0.08em;">
+            <span>Charts key</span>
+            <button id="${CHARTS_KEYBIND_BTN_ID}" style="${keybindButtonStyle}">${chartsToggleKey.toUpperCase()}</button>
           </div>
         </div>
       </div>
 
-      <div style="margin-top:10px; border-top:1px solid rgba(255,255,255,0.06); padding-top:10px;">
-        <button id="${CHARTS_BTN_ID}" style="
-          width:100%;
-          height:34px;
-          border-radius:10px;
-          border:1px solid rgba(34,211,238,0.2);
-          background:rgba(34,211,238,0.08);
-          color:#22d3ee;
-          font-size:10px;
-          font-weight:600;
-          letter-spacing:0.12em;
-          text-transform:uppercase;
-          cursor:pointer;
-          transition:background 0.15s;
-        ">Airport Charts</button>
-        <button id="${IDENT_BTN_ID}" style="
-          width:100%;
-          height:30px;
-          margin-top:8px;
-          border-radius:10px;
-          border:1px solid rgba(251,191,36,0.3);
-          background:rgba(251,191,36,0.1);
-          color:#fcd34d;
+      <div style="
+        margin-top:10px;
+        border-top:1px solid rgba(255,255,255,0.08);
+        padding-top:10px;
+      ">
+        <button id="${CHARTS_BTN_ID}" type="button" style="
+          display:flex;
+          align-items:center;
+          gap:8px;
+          padding:0;
+          border:0;
+          background:none;
+          color:#94a3b8;
           font-size:9px;
           font-weight:700;
-          letter-spacing:0.12em;
+          letter-spacing:0.14em;
           text-transform:uppercase;
           cursor:pointer;
-          transition:background 0.15s, border-color 0.15s, color 0.15s;
-        " title="Press if ATC asks you to IDENT.">IDENT</button>
+        ">Open Airport Charts
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M7 17 17 7M9 7h8v8" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
       </div>
     `;
 
@@ -2432,7 +2391,7 @@
         toggle.setAttribute("aria-expanded", String(expanded));
         body.hidden = !expanded;
         toggle.querySelector("[data-acars-chevron]").style.transform =
-          expanded ? "rotate(180deg)" : "";
+          expanded ? "rotate(90deg)" : "";
       });
 
     if (isMobile) {
@@ -2508,7 +2467,7 @@
       const arrow = document.getElementById(RADAR_SETTINGS_ARROW_ID);
       const opening = body.style.display === "none";
       body.style.display = opening ? "grid" : "none";
-      body.style.gap = "6px";
+      body.style.gap = "10px";
       arrow.style.transform = opening ? "rotate(90deg)" : "rotate(0deg)";
     };
 
@@ -2521,6 +2480,14 @@
     }
 
     setupToggle(SEABUS_TOGGLE_ID, "seabus");
+
+    document
+      .getElementById(MILITARY_CHECKBOX_ID)
+      .addEventListener("change", (event) => {
+        setMilitaryMode(event.currentTarget.checked);
+        if (event.currentTarget.checked)
+          document.getElementById(AF_INPUT_ID).focus();
+      });
 
     document.getElementById(SAVE_BTN_ID).onclick = async () => {
       const dep = document.getElementById(DEP_INPUT_ID).value.trim();
@@ -2571,22 +2538,11 @@
         SQK_INPUT_ID,
         AF_INPUT_ID,
       ].forEach((id) => (document.getElementById(id).value = ""));
+      setMilitaryMode(false);
       window.dispatchEvent(
         new CustomEvent("atc-data-sync", { detail: { active: false } }),
       );
       showToast("Flight info cleared");
-    };
-
-    document.getElementById(IDENT_BTN_ID).onclick = () => {
-      const durationSeconds =
-        identRequestUntil > Date.now() ? identRequestDurationSeconds : 15;
-      window.dispatchEvent(
-        new CustomEvent("radarthing-ident-confirm", {
-          detail: { durationSeconds },
-        }),
-      );
-      identRequestUntil = 0;
-      updateIdentUI();
     };
 
     window.addEventListener("radarthing-flight-disconnected", () => {
@@ -2600,12 +2556,11 @@
         const input = document.getElementById(id);
         if (input) input.value = "";
       });
+      setMilitaryMode(false);
       showToast("Radar disconnected");
     });
 
     document.getElementById(CHARTS_BTN_ID).onclick = toggleChartsPanel;
-
-    updateIdentUI();
   }
 
   // ==========================================
@@ -3239,26 +3194,6 @@
     }
   });
 
-  window.addEventListener("radarthing-ident-requested", (e) => {
-    identRequestDurationSeconds = Math.max(
-      5,
-      Number(e.detail?.durationSeconds) || 15,
-    );
-    identRequestUntil = Date.now() + IDENT_REQUEST_WINDOW_MS;
-    updateIdentUI();
-  });
-
-  window.addEventListener("radarthing-ident-update", (e) => {
-    identActiveUntil =
-      e.detail?.active && Number(e.detail?.identUntil) > Date.now()
-        ? Number(e.detail.identUntil)
-        : 0;
-    if (identActiveUntil > 0) {
-      identRequestUntil = 0;
-    }
-    updateIdentUI();
-  });
-
   // ==========================================
   // INIT
   // ==========================================
@@ -3270,7 +3205,6 @@
   setupChartZoomHandlers();
   startResumePromptPolling();
   setInterval(syncFlightPlan, 3000);
-  setInterval(updateIdentUI, 1000);
   setInterval(() => {
     updateSignInNotice();
     const googleId = acarsPilotId();

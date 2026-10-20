@@ -30,8 +30,6 @@ export interface PositionUpdate {
   speedMode?: "knots" | "mach";
   flapsPosition?: number;
   flapsMaxPosition?: number;
-  identActive?: boolean;
-  identUntil?: number | null;
   ts: number;
   lastSeen: number;
   flightPath?: [number, number][];

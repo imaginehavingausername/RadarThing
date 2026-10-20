@@ -21,9 +21,7 @@ function isRadarThingTraffic(aircraft: PositionUpdate) {
     aircraft.speedMode === "knots" ||
     aircraft.speedMode === "mach" ||
     typeof aircraft.flapsPosition === "number" ||
-    typeof aircraft.flapsMaxPosition === "number" ||
-    typeof aircraft.identActive === "boolean" ||
-    typeof aircraft.identUntil === "number"
+    typeof aircraft.flapsMaxPosition === "number"
   );
 }
 

@@ -439,10 +439,6 @@ export const Analytics = {
     track("control_set_all", props);
   },
 
-  identRequested: (props: { callsign?: string; durationSeconds?: number }) => {
-    track("ident_requested", props);
-  },
-
   flightDisconnected: (props: { callsign?: string }) => {
     track("flight_disconnected", props);
   },

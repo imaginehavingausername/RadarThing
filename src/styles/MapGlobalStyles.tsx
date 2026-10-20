@@ -130,30 +130,6 @@ export const MapGlobalStyles = ({ hideUi = false }: { hideUi?: boolean }) => (
       }
     }
 
-    @keyframes radar-ident-pulse {
-      0% {
-        opacity: 0.95;
-        transform: scale(1);
-        box-shadow:
-          0 0 10px rgba(251, 191, 36, 0.8),
-          0 0 18px rgba(251, 191, 36, 0.45);
-      }
-      50% {
-        opacity: 0.65;
-        transform: scale(1.3);
-        box-shadow:
-          0 0 16px rgba(251, 191, 36, 1),
-          0 0 28px rgba(251, 191, 36, 0.7);
-      }
-      100% {
-        opacity: 0.95;
-        transform: scale(1);
-        box-shadow:
-          0 0 10px rgba(251, 191, 36, 0.8),
-          0 0 18px rgba(251, 191, 36, 0.45);
-      }
-    }
-
     .leaflet-aircraft-icon,
     .leaflet-radar-aircraft-icon {
       transition: none !important;

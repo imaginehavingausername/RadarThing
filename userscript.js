@@ -7,13 +7,10 @@
   const GROUND_SEND_INTERVAL_MS = 1000;
   const POSITION_REQUEST_TIMEOUT_MS = 10000;
   const COMMAND_POLL_INTERVAL_MS = 2000;
-  const DEFAULT_IDENT_DURATION_SECONDS = 15;
 
   let info = { active: false, dep: "", arr: "", flt: "", sqk: "", af: "" };
   let wasOnGround = true;
   let takeoffTimeUTC = "";
-  let identActiveUntil = 0;
-  let identExpiryTimer = null;
   let lastPositionSendAt = 0;
   let positionUpdateInFlight = false;
   let positionRequestSequence = 0;
@@ -35,10 +32,6 @@
       geofs?.userRecord?.googleid ||
       sanitizeCallsign(geofs?.userRecord?.callsign)
     );
-  }
-
-  function isIdentActive() {
-    return identActiveUntil > Date.now();
   }
 
   function getErrorDiagnostics(error) {
@@ -72,7 +65,7 @@
     };
   }
 
-  function showIdentToast(message, isError = false) {
+  function showToast(message, isError = false) {
     const toast = document.createElement("div");
     toast.textContent = message;
     toast.style.cssText = `
@@ -100,68 +93,6 @@
       setTimeout(() => toast.remove(), 250);
     }, 2400);
   }
-
-  function broadcastIdentUpdate(active) {
-    window.dispatchEvent(
-      new CustomEvent("radarthing-ident-update", {
-        detail: {
-          active,
-          identUntil: active ? identActiveUntil : null,
-        },
-      }),
-    );
-  }
-
-  function scheduleIdentExpiry() {
-    if (identExpiryTimer) {
-      clearTimeout(identExpiryTimer);
-      identExpiryTimer = null;
-    }
-
-    if (!isIdentActive()) {
-      identActiveUntil = 0;
-      broadcastIdentUpdate(false);
-      return;
-    }
-
-    identExpiryTimer = setTimeout(
-      () => {
-        identActiveUntil = 0;
-        broadcastIdentUpdate(false);
-      },
-      Math.max(250, identActiveUntil - Date.now() + 50),
-    );
-  }
-
-  function activateIdent(durationSeconds) {
-    const durationMs = Math.max(
-      5000,
-      Number(durationSeconds || DEFAULT_IDENT_DURATION_SECONDS) * 1000,
-    );
-    identActiveUntil = Date.now() + durationMs;
-    showIdentToast("IDENT ACTIVE");
-    broadcastIdentUpdate(true);
-    scheduleIdentExpiry();
-  }
-
-  function requestIdent(durationSeconds) {
-    const requestedSeconds = Math.max(
-      5,
-      Number(durationSeconds || DEFAULT_IDENT_DURATION_SECONDS),
-    );
-    showIdentToast("ATC requested IDENT");
-    window.dispatchEvent(
-      new CustomEvent("radarthing-ident-requested", {
-        detail: { durationSeconds: requestedSeconds },
-      }),
-    );
-  }
-
-  window.addEventListener("radarthing-ident-confirm", (e) => {
-    activateIdent(
-      Number(e.detail?.durationSeconds) || DEFAULT_IDENT_DURATION_SECONDS,
-    );
-  });
 
   // Command execution handlers
   function executeCommand(cmd) {
@@ -324,10 +255,6 @@
           }
           break;
 
-        case "requestIdent":
-          requestIdent(Number(cmd.value) || DEFAULT_IDENT_DURATION_SECONDS);
-          break;
-
         case "disconnectFlight":
           stopFollow();
           window.dispatchEvent(
@@ -338,7 +265,7 @@
           window.dispatchEvent(
             new CustomEvent("radarthing-flight-disconnected"),
           );
-          showIdentToast("RADAR DISCONNECTED");
+          showToast("RADAR DISCONNECTED");
           break;
 
         default:
@@ -394,7 +321,7 @@
   setInterval(pollCommands, COMMAND_POLL_INTERVAL_MS);
 
   function broadcastStatus() {
-    let status = { text: "Flight info required", color: "#e74c3c" };
+    let status = { text: "Flight info required", color: "#94a3b8" };
     if (info.active) {
       status = { text: "Transmitting to API", color: "#27ae60" };
     }
@@ -568,8 +495,6 @@
           geofs?.animation?.values?.flapsSteps ||
           controls?.flaps?.maxPosition ||
           0,
-        identActive: isIdentActive(),
-        identUntil: isIdentActive() ? identActiveUntil : null,
       };
 
       requestId = ++positionRequestSequence;

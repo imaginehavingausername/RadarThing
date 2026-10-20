@@ -142,13 +142,6 @@ export const changelog: ChangelogEntry[] = [
     type: "new",
   },
   {
-    id: "controller-ident-requests",
-    date: "2026-04-03",
-    title: "Controller IDENT Requests",
-    description: "Update your userscript for the new pilot IDENT UI.",
-    type: "new",
-  },
-  {
     id: "replay-hides-live-traffic",
     date: "2026-04-02",
     title: "Cleaner Flight Replays",

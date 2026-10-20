@@ -2305,7 +2305,7 @@
           ${buildInputRow("DEPARTURE", DEP_INPUT_ID, "ICAO", 4)}
           ${buildInputRow("ARRIVAL", ARR_INPUT_ID, "ICAO", 4)}
         </div>
-        <div style="display:grid; grid-template-columns:minmax(0,2fr) minmax(0,1fr); gap:8px;">
+        <div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px;">
           ${buildInputRow("CALLSIGN", FLT_INPUT_ID, "ABC123")}
           ${buildInputRow("SQUAWK", SQK_INPUT_ID, "7000", 4)}
         </div>
